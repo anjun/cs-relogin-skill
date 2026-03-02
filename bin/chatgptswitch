@@ -247,7 +247,7 @@ obj = {
   'profileId': profile_id,
   'clientId': client_id,
   'redirectUri': redirect_uri,
-  'oauthTokenUrl': 'https://auth.openai.com/oauth/token',
+  'oauthTokenUrl': os.environ.get('CHATGPTSWITCH_OAUTH_TOKEN_URL', 'https://auth.openai.com/oauth/token'),
   'state': state,
   'verifier': verifier,
   'createdAt': int(time.time() * 1000),
@@ -497,14 +497,31 @@ PY
 }
 
 restart_gateway() {
-  systemctl --user restart "$SERVICE_NAME"
-  if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
-    echo "[OK] restarted: $SERVICE_NAME"
-  else
-    echo "[ERR] service not active after restart: $SERVICE_NAME" >&2
-    systemctl --user status "$SERVICE_NAME" --no-pager | sed -n '1,40p' >&2 || true
-    exit 1
+  # Linux user service path (preferred when available)
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1; then
+      if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        echo "[OK] restarted: $SERVICE_NAME (systemd user service)"
+        return 0
+      fi
+      echo "[WARN] restarted but service not active: $SERVICE_NAME" >&2
+      systemctl --user status "$SERVICE_NAME" --no-pager | sed -n '1,40p' >&2 || true
+    fi
   fi
+
+  # Cross-platform fallback: OpenClaw CLI restart (macOS / Windows / non-systemd Linux)
+  if command -v openclaw >/dev/null 2>&1; then
+    if openclaw gateway restart >/dev/null 2>&1; then
+      echo "[OK] restarted: openclaw gateway (CLI fallback)"
+      return 0
+    fi
+  fi
+
+  echo "[ERR] failed to restart gateway. Tried systemctl and openclaw CLI." >&2
+  echo "[HINT] run one of:" >&2
+  echo "  systemctl --user restart $SERVICE_NAME" >&2
+  echo "  openclaw gateway restart" >&2
+  exit 1
 }
 
 need_cmd python3

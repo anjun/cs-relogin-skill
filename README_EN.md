@@ -27,8 +27,16 @@ Handle the full relogin flow for you:
 
 This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 
+Linux / macOS:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+```
+
+Windows (PowerShell, requires Git Bash or WSL `bash`):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
 ```
 
 Verify:
@@ -36,6 +44,15 @@ Verify:
 ```bash
 cs relogin status
 ```
+
+## Compatibility review
+
+- **Linux VPS (systemd)**: ✅ works (prefers `systemctl --user` restart)
+- **Linux VPS (no systemd)**: ✅ works (falls back to `openclaw gateway restart`)
+- **macOS**: ✅ works (uses OpenClaw CLI restart fallback)
+- **Windows native**: ⚠️ requires a Bash runtime (Git Bash or WSL)
+
+Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
 ## OpenClaw Skill install
 

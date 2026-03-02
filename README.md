@@ -20,8 +20,16 @@
 
 > 这个仓库不只是 skill 壳子，已包含可执行命令：`bin/chatgptswitch` + `bin/cs`。
 
+Linux / macOS:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+```
+
+Windows（PowerShell，要求有 Git Bash 或 WSL 的 `bash`）：
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
 ```
 
 安装后验证：
@@ -39,6 +47,15 @@ cs relogin status
 
 ### 方式 B：打包安装
 使用 `dist/cs-relogin.skill` 导入。
+
+## 环境兼容性（review 结论）
+
+- **Linux VPS（systemd）**：✅ 可用（优先 `systemctl --user` 重启）
+- **Linux VPS（无 systemd）**：✅ 可用（自动回退 `openclaw gateway restart`）
+- **macOS**：✅ 可用（通过 `openclaw gateway restart` 回退）
+- **Windows 原生**：⚠️ 需有 `bash` 环境（Git Bash/WSL），脚本本体是 Bash
+
+依赖：`bash`、`python3`、`curl`、`openclaw`。
 
 ## 常见命令
 
