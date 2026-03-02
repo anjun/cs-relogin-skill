@@ -23,22 +23,24 @@ Handle the full relogin flow for you:
 2. **Frequent Xianyu account session drops** require repeated re-login.
 3. **Slow troubleshooting** when failures happen.
 
-## What it does
+## One-line install (includes original `cs` command)
 
-- Runs `cs relogin` and returns fresh OAuth URL
-- Accepts pasted callback URL/code and completes relogin
-- Reports active account/profile after success
-- Surfaces raw command errors first for debugging
+This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 
-## Installation
+```bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+```
 
-### Option A: Folder install
-Put `skills/cs-relogin` under:
+Verify:
 
-- `~/.openclaw/skills/`
+```bash
+cs relogin status
+```
 
-### Option B: Package install
-Import `dist/cs-relogin.skill`.
+## OpenClaw Skill install
+
+- Folder install: put `skills/cs-relogin` under `~/.openclaw/skills/`
+- Package install: import `dist/cs-relogin.skill`
 
 ## Typical commands
 
@@ -50,15 +52,21 @@ Import `dist/cs-relogin.skill`.
 ## Structure
 
 ```text
+bin/
+  chatgptswitch
+  cs
+
 skills/
   cs-relogin/
     SKILL.md
 
 dist/
   cs-relogin.skill
+
+install.sh
 ```
 
 ## Security note
 
-- This skill orchestrates auth login/switch only
+- This tool orchestrates auth login/switch only
 - It should never expose full token values

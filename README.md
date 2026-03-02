@@ -16,14 +16,21 @@
 2. **某鱼号容易掉线**：需要频繁重新登录，重复操作浪费时间。
 3. **失败定位慢**：不知道该优先看哪个状态命令。
 
-## 能力说明
+## 一键安装（包含原始 cs 命令）
 
-- 用户发 `cs relogin`：自动执行并返回最新 OAuth 登录 URL
-- 用户粘贴 callback URL/code：自动完成 `cs relogin '<callback>'`
-- 完成后回报 active profile / account
-- 失败时优先返回原始错误，便于快速排障
+> 这个仓库不只是 skill 壳子，已包含可执行命令：`bin/chatgptswitch` + `bin/cs`。
 
-## 安装
+```bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+```
+
+安装后验证：
+
+```bash
+cs relogin status
+```
+
+## OpenClaw Skill 安装
 
 ### 方式 A：目录安装
 将 `skills/cs-relogin` 放入：
@@ -43,12 +50,18 @@
 ## 目录结构
 
 ```text
+bin/
+  chatgptswitch
+  cs
+
 skills/
   cs-relogin/
     SKILL.md
 
 dist/
   cs-relogin.skill
+
+install.sh
 ```
 
 ## 安全说明
