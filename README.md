@@ -53,7 +53,7 @@ cs relogin status
 - **Linux VPS（systemd）**：✅ 可用（优先 `systemctl --user` 重启）
 - **Linux VPS（无 systemd）**：✅ 可用（自动回退 `openclaw gateway restart`）
 - **macOS**：✅ 可用（通过 `openclaw gateway restart` 回退）
-- **Windows 原生**：⚠️ 需有 `bash` 环境（Git Bash/WSL），脚本本体是 Bash
+- **Windows 原生**：❌ 当前不支持（除非你自行提供 Git Bash/WSL 等 Bash 运行时）
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 

@@ -50,7 +50,7 @@ cs relogin status
 - **Linux VPS (systemd)**: ✅ works (prefers `systemctl --user` restart)
 - **Linux VPS (no systemd)**: ✅ works (falls back to `openclaw gateway restart`)
 - **macOS**: ✅ works (uses OpenClaw CLI restart fallback)
-- **Windows native**: ⚠️ requires a Bash runtime (Git Bash or WSL)
+- **Windows native**: ❌ not supported for now (unless you bring your own Bash runtime such as Git Bash/WSL)
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
