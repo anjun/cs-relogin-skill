@@ -10,6 +10,8 @@
 
 > 自动化 `cs relogin`：生成登录链接 → 粘贴 callback → 完成登录 → 回报当前账号状态。
 
+并且：**每一步都给明确回执**（执行了什么、成功/失败、当前状态）。
+
 ## 痛点（为什么要做）
 
 1. **多账号切换流程麻烦**：命令、浏览器、回调 URL、状态确认，步骤繁琐且易漏。
@@ -26,11 +28,7 @@ Linux / macOS:
 curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
 ```
 
-Windows（PowerShell，要求有 Git Bash 或 WSL 的 `bash`）：
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
-```
+> Windows 原生当前不支持（本项目依赖 Bash）。
 
 安装后验证：
 

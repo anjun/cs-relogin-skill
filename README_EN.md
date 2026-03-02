@@ -16,6 +16,7 @@ Handle the full relogin flow for you:
 2. Accept callback URL/code
 3. Complete relogin
 4. Report active profile/account status
+5. Give explicit acknowledgement for each step (action + result + current state)
 
 ## Pain points solved
 
@@ -33,11 +34,7 @@ Linux / macOS:
 curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
 ```
 
-Windows (PowerShell, requires Git Bash or WSL `bash`):
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
-```
+> Native Windows is not supported for now (this project depends on Bash).
 
 Verify:
 

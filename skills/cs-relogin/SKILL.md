@@ -49,3 +49,18 @@ Use this skill to perform OpenAI Codex account switching without `openclaw onboa
 - Include exact next command when another step is needed.
 - Never expose full tokens/secrets.
 - On command failure, include raw cs stderr first (do not guess the reason).
+
+## Acknowledgement rule (MUST)
+
+- Every successful action must have an explicit acknowledgement (回执) to the user.
+- Minimum acknowledgement content:
+  - what was executed (e.g. `cs relogin`, `cs relogin <callback>`, `cs status`)
+  - whether it succeeded
+  - current state summary (pending relogin / active account)
+- If command output is missing or tool callback is flaky, immediately run:
+  ```bash
+  cs relogin status
+  cs status
+  ```
+  then send acknowledgement based on those results.
+- Never end silently after command execution.
