@@ -28,6 +28,8 @@ Handle the full relogin flow for you:
 
 This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 
+✅ **You can run it directly on a remote server (SSH shell)** after installation (`cs relogin` / `cs status`).
+
 Linux / macOS:
 
 ```bash
@@ -40,6 +42,22 @@ Verify:
 
 ```bash
 cs relogin status
+```
+
+## Server usage (quick path)
+
+```bash
+# 1) Install on the server shell
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+
+# 2) Check current account status
+cs status
+
+# 3) Start relogin (prints OAuth URL)
+cs relogin
+
+# 4) Paste callback URL/code to finish
+cs relogin '<callback-url-or-code>'
 ```
 
 ## Compatibility review

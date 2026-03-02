@@ -22,6 +22,8 @@
 
 > 这个仓库不只是 skill 壳子，已包含可执行命令：`bin/chatgptswitch` + `bin/cs`。
 
+✅ **支持直接在服务器（SSH）上执行**：安装完成后可在服务器终端直接运行 `cs relogin` / `cs status`。
+
 Linux / macOS:
 
 ```bash
@@ -34,6 +36,22 @@ curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/insta
 
 ```bash
 cs relogin status
+```
+
+## 服务器上怎么用（最短路径）
+
+```bash
+# 1) 登录服务器后安装
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+
+# 2) 查看当前状态
+cs status
+
+# 3) 发起重登（会输出 OAuth 链接）
+cs relogin
+
+# 4) 将回调 URL 或 code 粘贴回终端完成登录
+cs relogin '<callback-url-or-code>'
 ```
 
 ## OpenClaw Skill 安装
