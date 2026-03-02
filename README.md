@@ -1,23 +1,31 @@
-# cs-relogin（OpenClaw 技能）
+# cs-relogin
 
-> 默认中文文档。English: [README.en.md](./README.en.md)
+<p align="center">
+  <a href="#中文">中文</a> · <a href="#english">English</a>
+</p>
 
-一个把 `cs relogin` 登录/切号流程交给模型自动处理的技能。
+---
 
-## 解决什么痛点
+## 中文
 
-1. **多账号切换麻烦**：手动执行命令、复制回调 URL、确认状态，步骤碎。
-2. **某鱼号容易掉线**：需要频繁重新登录，重复操作浪费时间。
-3. **排障不稳定**：失败时不知道看哪条命令和状态。
+**cs-relogin 是一个给 OpenClaw 用的技能，核心用途是：**
 
-## 能做什么
+> 把 **ChatGPT Auth（Codex OAuth）登录/切号** 这套麻烦流程交给模型执行。
 
-- 收到 `cs relogin` 时自动触发登录流程
-- 自动识别并处理你粘贴的 callback URL/code
-- 登录完成后检查并回报当前账号状态
-- 失败时优先返回原始错误，方便定位
+### 为什么需要它（痛点）
 
-## 目录结构
+1. **多账号切换太烦**：手动跑命令、开浏览器、贴 callback URL、再检查状态，步骤碎且容易漏。
+2. **某鱼号容易掉线**：需要频繁重新登录，重复劳动。
+3. **失败不好排查**：不知道该看 `cs relogin status` 还是 `cs status`。
+
+### 这个技能做什么
+
+- 用户发 `cs relogin` → 自动执行并返回新的 OAuth 登录链接
+- 用户贴 callback URL/code → 自动完成 `cs relogin '<callback>'`
+- 登录后自动回报当前 active account / profile 状态
+- 失败时优先返回原始错误输出，便于定位
+
+### 目录结构
 
 ```text
 skills/
@@ -28,24 +36,57 @@ dist/
   cs-relogin.skill
 ```
 
-## 快速使用
+### 安装方式
 
-### 方式 A：手动安装（开发目录）
-把 `skills/cs-relogin` 放到你的 skills 目录，例如：
+#### 方式 A：目录安装
+把 `skills/cs-relogin` 放进：
 
 - `~/.openclaw/skills/`
 
-### 方式 B：用打包文件安装
-使用 `dist/cs-relogin.skill` 进行安装（按你的 OpenClaw 安装方式导入）。
+#### 方式 B：打包安装
+使用 `dist/cs-relogin.skill` 导入安装。
 
-## 典型对话
+### 常见用法
 
 - `cs relogin`
-- 粘贴浏览器回调 URL（`http://localhost:1455/auth/callback?...`）
+- 粘贴浏览器回调 URL：`http://localhost:1455/auth/callback?...`
 - `cs relogin status`
 - `cs status`
 
-## 说明
+### 安全说明
 
-- 本技能只负责 **登录/切号流程编排**，不改你的业务逻辑。
-- 不会主动暴露 token 等敏感信息。
+- 仅编排登录/切号流程，不改业务代码
+- 不应输出完整 token 等敏感信息
+
+---
+
+## English
+
+**cs-relogin is an OpenClaw skill focused on one thing:**
+
+> Let the model handle **ChatGPT Auth (Codex OAuth) login/account switching** end-to-end.
+
+### Pain points solved
+
+1. **Multi-account switch is tedious** (command + browser auth + callback URL + status checks).
+2. **Frequent re-login for Xianyu account** due to session drops.
+3. **Troubleshooting is inconsistent** when login fails.
+
+### What it does
+
+- Runs `cs relogin` and returns a fresh OAuth login URL
+- Accepts pasted callback URL/code and completes relogin
+- Reports active profile/account after completion
+- Surfaces raw command errors first for debugging
+
+### Install
+
+- Folder install: put `skills/cs-relogin` under `~/.openclaw/skills/`
+- Package install: import `dist/cs-relogin.skill`
+
+### Typical commands
+
+- `cs relogin`
+- callback URL: `http://localhost:1455/auth/callback?...`
+- `cs relogin status`
+- `cs status`
