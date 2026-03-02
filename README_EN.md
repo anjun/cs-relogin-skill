@@ -18,6 +18,16 @@ Handle the full relogin flow for you:
 4. Report active profile/account status
 5. Give explicit acknowledgement for each step (action + result + current state)
 
+## One-click use with AI (OpenClaw)
+
+**Let the AI model handle login/account switching for you:**
+
+1. Install this skill (see "One-line install" below)
+2. Tell the model: `Help me login to ChatGPT` or `Switch to my Xianyu account`
+3. The model runs `cs relogin` automatically, gives you the OAuth URL → waits for callback → completes login and reports status
+
+**That's it. No need to remember commands.**
+
 ## Pain points solved
 
 1. **Multi-account switching is tedious** (CLI + browser + callback + status checks).
