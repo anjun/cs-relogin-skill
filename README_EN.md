@@ -81,8 +81,21 @@ Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
 ## OpenClaw Skill install
 
+> This skill is now **self-contained**: `skills/cs-relogin/scripts/{cs,chatgptswitch}` are bundled with the skill.
+> The published `.skill` package should include these scripts (no global `cs` PATH dependency).
+
 - Folder install: put `skills/cs-relogin` under `~/.openclaw/skills/`
 - Package install: import `dist/cs-relogin.skill`
+
+Package self-check:
+
+```bash
+unzip -l dist/cs-relogin.skill
+# expected:
+# cs-relogin/SKILL.md
+# cs-relogin/scripts/cs
+# cs-relogin/scripts/chatgptswitch
+```
 
 ## Typical commands
 
@@ -101,6 +114,9 @@ bin/
 skills/
   cs-relogin/
     SKILL.md
+    scripts/
+      chatgptswitch
+      cs
 
 dist/
   cs-relogin.skill

@@ -1,36 +1,51 @@
 ---
 name: cs-relogin
-description: Fast OpenAI Codex account switch for OpenClaw via the local cs command. Use when user sends `cs relogin`, asks to re-login or switch ChatGPT Codex account, or pastes OAuth callback URL/code to complete login.
-allowed-tools: ["Bash(cs:*)"]
+description: Self-contained OpenClaw skill for Codex OAuth account switch (relogin/status) without relying on system-wide `cs` install. Use when user says `cs relogin`, asks to switch ChatGPT Codex account, or provides OAuth callback URL/code.
+allowed-tools: ["Bash(*cs*)", "Bash(*chatgptswitch*)"]
 metadata: {"clawdbot":{"emoji":"🔐"}}
 ---
 
-# CS Relogin Skill
+# CS Relogin Skill (Self-contained)
 
 Use this skill to perform OpenAI Codex account switching without `openclaw onboard`.
 
+This skill bundles executables in `scripts/`:
+- `scripts/cs`
+- `scripts/chatgptswitch`
+
 ## Hard rules
 
-- Always execute `cs` directly, never call `openclaw onboard` for this task.
+- Always execute bundled `scripts/cs`; do not depend on global `cs` in PATH.
+- Never call `openclaw onboard` for this task.
 - Keep flow non-interactive.
-- If user provided a callback URL/code, do completion step immediately.
+- If user provided callback URL/code, complete relogin immediately.
+
+## Path rule (MUST)
+
+The system prompt provides this skill file path. Resolve skill directory from it and run commands with absolute path.
+
+Example (replace with actual skill dir):
+```bash
+SKILL_DIR="<dirname-of-this-SKILL.md>"
+"$SKILL_DIR/scripts/cs" status
+```
 
 ## Workflow
 
 1. If user input is exactly `cs relogin`:
    - Run:
      ```bash
-     cs relogin
+     "$SKILL_DIR/scripts/cs" relogin
      ```
-   - Return the login URL from command output.
-   - Ask user to finish browser auth and paste callback URL.
+   - Return login URL from output.
+   - Ask user to complete browser auth and paste callback URL.
 
 2. If user input contains callback URL/code:
    - Run:
      ```bash
-     cs relogin "<callback-url-or-code>"
+     "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>"
      ```
-   - Return key result lines:
+   - Return key lines:
      - relogin completed status
      - gateway restart status
      - active profile/account summary
@@ -38,8 +53,8 @@ Use this skill to perform OpenAI Codex account switching without `openclaw onboa
 3. If user asks status/debug:
    - Run:
      ```bash
-     cs relogin status
-     cs status
+     "$SKILL_DIR/scripts/cs" relogin status
+     "$SKILL_DIR/scripts/cs" status
      ```
    - Summarize pending state and active account.
 
@@ -48,19 +63,18 @@ Use this skill to perform OpenAI Codex account switching without `openclaw onboa
 - Keep response concise and actionable.
 - Include exact next command when another step is needed.
 - Never expose full tokens/secrets.
-- On command failure, include raw cs stderr first (do not guess the reason).
+- On failure, include raw stderr first (do not guess reason).
 
 ## Acknowledgement rule (MUST)
 
-- Every successful action must have an explicit acknowledgement (回执) to the user.
-- Minimum acknowledgement content:
-  - what was executed (e.g. `cs relogin`, `cs relogin <callback>`, `cs status`)
+- Every successful action must include explicit acknowledgement:
+  - what was executed
   - whether it succeeded
   - current state summary (pending relogin / active account)
-- If command output is missing or tool callback is flaky, immediately run:
+- If output is missing/flaky, immediately run:
   ```bash
-  cs relogin status
-  cs status
+  "$SKILL_DIR/scripts/cs" relogin status
+  "$SKILL_DIR/scripts/cs" status
   ```
-  then send acknowledgement based on those results.
-- Never end silently after command execution.
+  then send acknowledgement.
+- Never end silently after execution.

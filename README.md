@@ -66,6 +66,9 @@ cs relogin '<callback-url-or-code>'
 
 ## OpenClaw Skill 安装
 
+> 当前 skill 为**自带运行脚本**形态：`skills/cs-relogin/scripts/{cs,chatgptswitch}`。
+> 发布的 `.skill` 包应包含这些脚本，不依赖系统 PATH 里的 `cs`。
+
 ### 方式 A：目录安装
 将 `skills/cs-relogin` 放入：
 
@@ -73,6 +76,16 @@ cs relogin '<callback-url-or-code>'
 
 ### 方式 B：打包安装
 使用 `dist/cs-relogin.skill` 导入。
+
+可自检包内容：
+
+```bash
+unzip -l dist/cs-relogin.skill
+# 期望看到：
+# cs-relogin/SKILL.md
+# cs-relogin/scripts/cs
+# cs-relogin/scripts/chatgptswitch
+```
 
 ## 环境兼容性（review 结论）
 
@@ -100,6 +113,9 @@ bin/
 skills/
   cs-relogin/
     SKILL.md
+    scripts/
+      chatgptswitch
+      cs
 
 dist/
   cs-relogin.skill

@@ -1,0 +1,653 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+AGENTS_DIR="$STATE_DIR/agents"
+MAIN_AUTH_FILE="$AGENTS_DIR/main/agent/auth-profiles.json"
+SERVICE_NAME="${OPENCLAW_GATEWAY_SERVICE:-openclaw-gateway.service}"
+DEFAULT_PROFILE_ID="${CHATGPTSWITCH_PROFILE_ID:-openai-codex:default}"
+
+OAUTH_CLIENT_ID="${CHATGPTSWITCH_OAUTH_CLIENT_ID:-app_EMoamEEZ73f0CkXaXp7hrann}"
+OAUTH_AUTHORIZE_URL="${CHATGPTSWITCH_OAUTH_AUTHORIZE_URL:-https://auth.openai.com/oauth/authorize}"
+OAUTH_TOKEN_URL="${CHATGPTSWITCH_OAUTH_TOKEN_URL:-https://auth.openai.com/oauth/token}"
+OAUTH_REDIRECT_URI="${CHATGPTSWITCH_OAUTH_REDIRECT_URI:-http://localhost:1455/auth/callback}"
+OAUTH_SCOPE="${CHATGPTSWITCH_OAUTH_SCOPE:-openid profile email offline_access}"
+OAUTH_ORIGINATOR="${CHATGPTSWITCH_OAUTH_ORIGINATOR:-pi}"
+PENDING_FILE="$STATE_DIR/chatgptswitch.relogin.pending.json"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  chatgptswitch relogin
+  chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] [--no-restart]
+  chatgptswitch relogin status
+
+  chatgptswitch <source-json-path> [--profile-id <id>] [--no-restart]
+  chatgptswitch use <profile-id> [--no-restart]
+  chatgptswitch list
+  chatgptswitch status
+
+Description:
+  A) Recommended account switch (non-interactive):
+     1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
+     2) login in your LOCAL browser and copy callback URL
+     3) `cs relogin "<callback-url>"` completes login, writes auth-profiles, restarts gateway
+
+  B) Legacy import/switch:
+     - Import a profile JSON directly, or switch existing profile id.
+
+Short alias:
+  cs
+USAGE
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "[ERR] Missing command: $1" >&2
+    exit 1
+  }
+}
+
+print_status() {
+  if [ ! -f "$MAIN_AUTH_FILE" ]; then
+    echo "[ERR] auth file not found: $MAIN_AUTH_FILE" >&2
+    exit 1
+  fi
+  python3 - "$MAIN_AUTH_FILE" "$PENDING_FILE" <<'PY'
+import json, sys, base64, os, time
+p = sys.argv[1]
+pending = sys.argv[2]
+with open(p, encoding='utf-8') as f:
+    data = json.load(f)
+profiles = data.get('profiles', {})
+active = data.get('lastGood', {}).get('openai-codex', '')
+print(f"auth_file: {p}")
+print(f"profiles: {len(profiles)}")
+print(f"active: {active or '(none)'}")
+for pid, prof in profiles.items():
+    if prof.get('provider') != 'openai-codex':
+        continue
+    account_id = prof.get('accountId', '')
+    email = ''
+    access = prof.get('access', '')
+    if access.count('.') >= 2:
+        try:
+            payload = access.split('.')[1]
+            payload += '=' * (-len(payload) % 4)
+            obj = json.loads(base64.urlsafe_b64decode(payload.encode()).decode())
+            auth = obj.get('https://api.openai.com/auth', {}) if isinstance(obj, dict) else {}
+            profile = obj.get('https://api.openai.com/profile', {}) if isinstance(obj, dict) else {}
+            account_id = account_id or auth.get('chatgpt_account_id', '')
+            email = profile.get('email', '')
+        except Exception:
+            pass
+    mark = '*' if pid == active else ' '
+    expires = prof.get('expires', '')
+    print(f"{mark} {pid} accountId={account_id or '-'} email={email or '-'} expires={expires or '-'}")
+if os.path.exists(pending):
+    try:
+        with open(pending, encoding='utf-8') as f:
+            x = json.load(f)
+        age = int(time.time() * 1000) - int(x.get('createdAt', 0) or 0)
+        print(f"pending_relogin: yes profileId={x.get('profileId','-')} ageMs={max(age,0)}")
+    except Exception:
+        print("pending_relogin: yes (unreadable)")
+else:
+    print("pending_relogin: no")
+PY
+}
+
+apply_import() {
+  local src="$1"
+  local target_profile_id="$2"
+
+  [ -f "$src" ] || {
+    echo "[ERR] source json not found: $src" >&2
+    exit 1
+  }
+
+  python3 - "$src" "$target_profile_id" "$STATE_DIR" <<'PY'
+import json, os, sys, glob, tempfile, shutil
+
+src_path, target_id, state_dir = sys.argv[1], sys.argv[2], os.path.expanduser(sys.argv[3])
+with open(src_path, encoding='utf-8') as f:
+    src = json.load(f)
+
+profile = None
+if isinstance(src, dict) and 'profiles' in src and isinstance(src['profiles'], dict):
+    if target_id in src['profiles']:
+        profile = src['profiles'][target_id]
+    else:
+        for _, p in src['profiles'].items():
+            if isinstance(p, dict) and p.get('provider') == 'openai-codex':
+                profile = p
+                break
+elif isinstance(src, dict) and src.get('provider') == 'openai-codex':
+    profile = src
+
+if not isinstance(profile, dict):
+    raise SystemExit('[ERR] invalid source json: cannot find openai-codex profile')
+if profile.get('provider') != 'openai-codex':
+    raise SystemExit('[ERR] source profile provider is not openai-codex')
+if profile.get('type') != 'oauth':
+    raise SystemExit('[ERR] source profile type must be oauth')
+if not profile.get('access') or not profile.get('refresh'):
+    raise SystemExit('[ERR] source profile missing access/refresh token')
+
+paths = sorted(glob.glob(os.path.join(state_dir, 'agents', '*', 'agent', 'auth-profiles.json')))
+if not paths:
+    paths = [os.path.join(state_dir, 'agents', 'main', 'agent', 'auth-profiles.json')]
+
+for p in paths:
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    if os.path.exists(p):
+        with open(p, encoding='utf-8') as f:
+            data = json.load(f)
+    else:
+        data = {"version": 1, "profiles": {}, "lastGood": {}, "usageStats": {}}
+
+    data['version'] = 1
+    profiles = data.setdefault('profiles', {})
+    profiles[target_id] = profile
+    data.setdefault('lastGood', {})['openai-codex'] = target_id
+    usage = data.setdefault('usageStats', {})
+    usage.setdefault(target_id, {"lastUsed": 0, "errorCount": 0})
+
+    if os.path.exists(p):
+        shutil.copy2(p, p + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='auth-profiles.', suffix='.json', dir=os.path.dirname(p))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, p)
+
+cfg_path = os.path.join(state_dir, 'openclaw.json')
+if os.path.exists(cfg_path):
+    with open(cfg_path, encoding='utf-8') as f:
+        cfg = json.load(f)
+    cfg.setdefault('auth', {}).setdefault('profiles', {})[target_id] = {
+        'provider': 'openai-codex',
+        'mode': 'oauth'
+    }
+    shutil.copy2(cfg_path, cfg_path + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='openclaw.', suffix='.json', dir=os.path.dirname(cfg_path))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, cfg_path)
+
+account_id = profile.get('accountId', '')
+print(json.dumps({"profileId": target_id, "filesUpdated": len(paths), "accountId": account_id}, ensure_ascii=False))
+PY
+}
+
+switch_existing() {
+  local target_profile_id="$1"
+
+  python3 - "$target_profile_id" "$STATE_DIR" <<'PY'
+import json, os, sys, glob, tempfile, shutil
+profile_id, state_dir = sys.argv[1], os.path.expanduser(sys.argv[2])
+paths = sorted(glob.glob(os.path.join(state_dir, 'agents', '*', 'agent', 'auth-profiles.json')))
+if not paths:
+    raise SystemExit('[ERR] no auth-profiles.json found under agents/*/agent')
+updated = 0
+for p in paths:
+    with open(p, encoding='utf-8') as f:
+        data = json.load(f)
+    profiles = data.get('profiles', {})
+    if profile_id not in profiles:
+        continue
+    data.setdefault('lastGood', {})['openai-codex'] = profile_id
+    shutil.copy2(p, p + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='auth-profiles.', suffix='.json', dir=os.path.dirname(p))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, p)
+    updated += 1
+if updated == 0:
+    raise SystemExit(f'[ERR] profile not found in any file: {profile_id}')
+print(updated)
+PY
+}
+
+relogin_begin() {
+  local profile_id="$1"
+  mkdir -p "$STATE_DIR"
+  python3 - "$PENDING_FILE" "$profile_id" "$OAUTH_CLIENT_ID" "$OAUTH_AUTHORIZE_URL" "$OAUTH_REDIRECT_URI" "$OAUTH_SCOPE" "$OAUTH_ORIGINATOR" <<'PY'
+import base64, hashlib, json, os, secrets, sys, time
+from urllib.parse import urlencode
+
+pending_path, profile_id, client_id, auth_url, redirect_uri, scope, originator = sys.argv[1:8]
+
+# OpenAI codex.js uses PKCE + random state. Keep same behavior.
+raw = secrets.token_urlsafe(64)
+verifier = raw.replace('=', '')
+challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+state = secrets.token_hex(16)
+params = {
+  'response_type': 'code',
+  'client_id': client_id,
+  'redirect_uri': redirect_uri,
+  'scope': scope,
+  'code_challenge': challenge,
+  'code_challenge_method': 'S256',
+  'state': state,
+  'id_token_add_organizations': 'true',
+  'codex_cli_simplified_flow': 'true',
+  'originator': originator,
+}
+url = auth_url + '?' + urlencode(params)
+obj = {
+  'version': 1,
+  'provider': 'openai-codex',
+  'profileId': profile_id,
+  'clientId': client_id,
+  'redirectUri': redirect_uri,
+  'oauthTokenUrl': os.environ.get('CHATGPTSWITCH_OAUTH_TOKEN_URL', 'https://auth.openai.com/oauth/token'),
+  'state': state,
+  'verifier': verifier,
+  'createdAt': int(time.time() * 1000),
+}
+if os.path.exists(pending_path):
+  try:
+    os.replace(pending_path, pending_path + '.bak.last')
+  except Exception:
+    pass
+with open(pending_path, 'w', encoding='utf-8') as f:
+  json.dump(obj, f, ensure_ascii=False, indent=2)
+  f.write('\n')
+print(url)
+PY
+}
+
+relogin_complete() {
+  local callback_input="$1"
+  local profile_id_override="$2"
+  python3 - "$PENDING_FILE" "$callback_input" "$profile_id_override" "$DEFAULT_PROFILE_ID" "$STATE_DIR" <<'PY'
+import base64, glob, json, os, shutil, sys, tempfile, time
+from urllib.parse import parse_qs, urlparse, urlencode
+from urllib.request import Request, urlopen, build_opener, ProxyHandler
+from urllib.error import HTTPError, URLError
+import socket
+
+pending_path, callback_input, profile_override, default_profile, state_dir = sys.argv[1:6]
+state_dir = os.path.expanduser(state_dir)
+if not os.path.exists(pending_path):
+    raise SystemExit('[ERR] no pending relogin found. Run: cs relogin')
+
+with open(pending_path, encoding='utf-8') as f:
+    pending = json.load(f)
+
+expected_state = str(pending.get('state', '')).strip()
+verifier = str(pending.get('verifier', '')).strip()
+client_id = str(pending.get('clientId', '')).strip() or 'app_EMoamEEZ73f0CkXaXp7hrann'
+redirect_uri = str(pending.get('redirectUri', '')).strip() or 'http://localhost:1455/auth/callback'
+token_url = str(pending.get('oauthTokenUrl', '')).strip() or 'https://auth.openai.com/oauth/token'
+profile_id = (profile_override.strip() if profile_override.strip() else str(pending.get('profileId', '')).strip()) or default_profile
+
+if not verifier:
+    raise SystemExit('[ERR] pending relogin data invalid: missing verifier')
+
+def parse_callback(value: str):
+    s = value.strip()
+    if not s:
+        return None, None
+    code = None
+    state = None
+    try:
+        u = urlparse(s)
+        if u.scheme and u.netloc:
+            q = parse_qs(u.query)
+            code = (q.get('code') or [None])[0]
+            state = (q.get('state') or [None])[0]
+            if not code and u.fragment:
+                f = parse_qs(u.fragment)
+                code = (f.get('code') or [None])[0]
+                state = state or (f.get('state') or [None])[0]
+            return code, state
+    except Exception:
+        pass
+    if '#' in s and '://' not in s:
+        c, st = s.split('#', 1)
+        return c.strip() or None, st.strip() or None
+    if 'code=' in s:
+        q = parse_qs(s[1:] if s.startswith('?') else s)
+        code = (q.get('code') or [None])[0]
+        state = (q.get('state') or [None])[0]
+        return code, state
+    return s, None
+
+code, state = parse_callback(callback_input)
+if not code:
+    raise SystemExit('[ERR] callback missing authorization code')
+if state and expected_state and state != expected_state:
+    raise SystemExit('[ERR] oauth state mismatch')
+
+# tolerate callback strings copied from rich text apps
+code = code.strip()
+if state:
+    state = state.strip()
+
+body = urlencode({
+    'grant_type': 'authorization_code',
+    'client_id': client_id,
+    'code': code,
+    'code_verifier': verifier,
+    'redirect_uri': redirect_uri,
+}).encode()
+
+def _proxy_listen_ok(proxy_url: str) -> bool:
+    try:
+        u = urlparse(proxy_url)
+        host = u.hostname or ''
+        port = u.port or (443 if (u.scheme or '').lower() == 'https' else 80)
+        if not host:
+            return False
+        with socket.create_connection((host, port), timeout=1.2):
+            return True
+    except Exception:
+        return False
+
+def _exchange_with_proxy(proxy):
+    req = Request(token_url, data=body, method='POST', headers={
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'chatgptswitch/2.2'
+    })
+    if proxy:
+        opener = build_opener(ProxyHandler({'http': proxy, 'https': proxy}))
+        with opener.open(req, timeout=30) as resp:
+            return json.loads(resp.read().decode('utf-8', 'replace')), proxy
+    with urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode('utf-8', 'replace')), None
+
+proxy_env = (os.environ.get('CHATGPTSWITCH_PROXY') or os.environ.get('ALL_PROXY') or os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY') or '').strip()
+proxy_fallback = (os.environ.get('CHATGPTSWITCH_PROXY_FALLBACK') or 'http://127.0.0.1:7890').strip()
+proxy_auto = (os.environ.get('CHATGPTSWITCH_PROXY_AUTO') or '1').strip() != '0'
+
+attempts = []
+if proxy_env:
+    attempts.append(proxy_env)
+else:
+    attempts.append(None)
+    if proxy_auto and proxy_fallback and _proxy_listen_ok(proxy_fallback):
+        attempts.append(proxy_fallback)
+
+last_err = None
+used_proxy = None
+data = None
+for idx, px in enumerate(attempts):
+    try:
+        data, used_proxy = _exchange_with_proxy(px)
+        break
+    except HTTPError as e:
+        detail = ''
+        try:
+            detail = e.read().decode('utf-8', 'replace')
+        except Exception:
+            pass
+        last_err = f'HTTP {e.code}: {detail or e.reason}'
+        unsupported_region = 'unsupported_country_region_territory' in detail
+        if idx + 1 < len(attempts) and (px is None) and unsupported_region:
+            continue
+        break
+    except (URLError, TimeoutError, OSError) as e:
+        last_err = str(e)
+        if idx + 1 < len(attempts):
+            continue
+        break
+    except Exception as e:
+        last_err = str(e)
+        break
+
+if data is None:
+    if len(attempts) > 1:
+        raise SystemExit(f'[ERR] token exchange failed (direct/proxy tried): {last_err}')
+    raise SystemExit(f'[ERR] token exchange failed: {last_err}')
+
+access = str(data.get('access_token', '')).strip()
+refresh = str(data.get('refresh_token', '')).strip()
+expires_in = data.get('expires_in', 0)
+if not access or not refresh or not isinstance(expires_in, (int, float)):
+    raise SystemExit('[ERR] token exchange response missing fields')
+expires = int(time.time() * 1000 + int(expires_in) * 1000)
+
+# decode accountId from JWT claim path used by openclaw/pi-ai
+try:
+    payload_b64 = access.split('.')[1]
+    payload_b64 += '=' * (-len(payload_b64) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()).decode())
+except Exception:
+    payload = {}
+auth_claim = payload.get('https://api.openai.com/auth', {}) if isinstance(payload, dict) else {}
+account_id = str(auth_claim.get('chatgpt_account_id', '')).strip()
+if not account_id:
+    raise SystemExit('[ERR] failed to extract chatgpt_account_id from access token')
+
+profile = {
+    'type': 'oauth',
+    'provider': 'openai-codex',
+    'access': access,
+    'refresh': refresh,
+    'expires': expires,
+    'accountId': account_id,
+}
+
+paths = sorted(glob.glob(os.path.join(state_dir, 'agents', '*', 'agent', 'auth-profiles.json')))
+if not paths:
+    paths = [os.path.join(state_dir, 'agents', 'main', 'agent', 'auth-profiles.json')]
+
+for p in paths:
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    if os.path.exists(p):
+        with open(p, encoding='utf-8') as f:
+            auth_data = json.load(f)
+    else:
+        auth_data = {'version': 1, 'profiles': {}, 'lastGood': {}, 'usageStats': {}}
+
+    auth_data['version'] = 1
+    auth_data.setdefault('profiles', {})[profile_id] = profile
+    auth_data.setdefault('lastGood', {})['openai-codex'] = profile_id
+    auth_data.setdefault('usageStats', {}).setdefault(profile_id, {'lastUsed': 0, 'errorCount': 0})
+
+    if os.path.exists(p):
+        shutil.copy2(p, p + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='auth-profiles.', suffix='.json', dir=os.path.dirname(p))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(auth_data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, p)
+
+cfg_path = os.path.join(state_dir, 'openclaw.json')
+if os.path.exists(cfg_path):
+    with open(cfg_path, encoding='utf-8') as f:
+        cfg = json.load(f)
+    cfg.setdefault('auth', {}).setdefault('profiles', {})[profile_id] = {
+        'provider': 'openai-codex',
+        'mode': 'oauth',
+    }
+    shutil.copy2(cfg_path, cfg_path + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='openclaw.', suffix='.json', dir=os.path.dirname(cfg_path))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, cfg_path)
+
+try:
+    os.remove(pending_path)
+except Exception:
+    pass
+
+out = {
+    'profileId': profile_id,
+    'accountId': account_id,
+    'expires': expires,
+    'filesUpdated': len(paths)
+}
+if used_proxy:
+    out['proxyUsed'] = used_proxy
+print(json.dumps(out, ensure_ascii=False))
+PY
+}
+
+restart_gateway() {
+  # Linux user service path (preferred when available)
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1; then
+      if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        echo "[OK] restarted: $SERVICE_NAME (systemd user service)"
+        return 0
+      fi
+      echo "[WARN] restarted but service not active: $SERVICE_NAME" >&2
+      systemctl --user status "$SERVICE_NAME" --no-pager | sed -n '1,40p' >&2 || true
+    fi
+  fi
+
+  # Cross-platform fallback: OpenClaw CLI restart (macOS / Windows / non-systemd Linux)
+  if command -v openclaw >/dev/null 2>&1; then
+    if openclaw gateway restart >/dev/null 2>&1; then
+      echo "[OK] restarted: openclaw gateway (CLI fallback)"
+      return 0
+    fi
+  fi
+
+  echo "[ERR] failed to restart gateway. Tried systemctl and openclaw CLI." >&2
+  echo "[HINT] run one of:" >&2
+  echo "  systemctl --user restart $SERVICE_NAME" >&2
+  echo "  openclaw gateway restart" >&2
+  exit 1
+}
+
+need_cmd python3
+
+if [ $# -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+cmd="$1"
+case "$cmd" in
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  status|list)
+    print_status
+    exit 0
+    ;;
+  relogin)
+    shift
+    if [ $# -eq 0 ]; then
+      url="$(relogin_begin "$DEFAULT_PROFILE_ID")"
+      echo "[OK] New Codex login URL generated."
+      echo
+      echo "$url"
+      echo
+      echo "登录完成后执行:"
+      echo "  cs relogin '<callback-url>'"
+      exit 0
+    fi
+
+    if [ "$1" = "status" ]; then
+      if [ -f "$PENDING_FILE" ]; then
+        echo "[OK] pending relogin exists: $PENDING_FILE"
+        sed -n '1,160p' "$PENDING_FILE"
+      else
+        echo "[OK] no pending relogin"
+      fi
+      exit 0
+    fi
+
+    callback_input="$1"
+    shift
+    pid=""
+    no_restart="0"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --profile-id)
+          shift
+          [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
+          pid="$1"
+          ;;
+        --no-restart)
+          no_restart="1"
+          ;;
+        *)
+          echo "[ERR] unknown option: $1" >&2
+          exit 1
+          ;;
+      esac
+      shift
+    done
+
+    res="$(relogin_complete "$callback_input" "$pid")"
+    echo "[OK] relogin completed: $res"
+    if [ "$no_restart" = "0" ]; then
+      restart_gateway
+    else
+      echo "[OK] skipped restart (--no-restart)"
+    fi
+    print_status
+    exit 0
+    ;;
+  use)
+    [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
+    pid="$2"
+    no_restart="0"
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --no-restart) no_restart="1" ;;
+        *) echo "[ERR] unknown option: $1" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    n="$(switch_existing "$pid")"
+    echo "[OK] switched to existing profile: $pid (files=$n)"
+    if [ "$no_restart" = "0" ]; then
+      restart_gateway
+    else
+      echo "[OK] skipped restart (--no-restart)"
+    fi
+    print_status
+    exit 0
+    ;;
+  *)
+    src="$1"
+    shift
+    pid="$DEFAULT_PROFILE_ID"
+    no_restart="0"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --profile-id)
+          shift
+          [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
+          pid="$1"
+          ;;
+        --no-restart)
+          no_restart="1"
+          ;;
+        *)
+          echo "[ERR] unknown option: $1" >&2
+          exit 1
+          ;;
+      esac
+      shift
+    done
+    res="$(apply_import "$src" "$pid")"
+    echo "[OK] imported profile: $res"
+    if [ "$no_restart" = "0" ]; then
+      restart_gateway
+    else
+      echo "[OK] skipped restart (--no-restart)"
+    fi
+    print_status
+    exit 0
+    ;;
+esac
