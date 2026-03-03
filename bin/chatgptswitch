@@ -31,7 +31,7 @@ Description:
   A) Recommended account switch (non-interactive):
      1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
      2) login in your LOCAL browser and copy callback URL
-     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (default no restart)
+     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (default auto restart; use --no-restart to skip)
 
   B) Legacy import/switch:
      - Import a profile JSON directly, or switch existing profile id.
@@ -543,7 +543,7 @@ case "$cmd" in
     shift
     pid=""
     apply="0"
-    do_restart="0"
+    do_restart="1"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -570,7 +570,7 @@ case "$cmd" in
 
     if [ "$apply" != "1" ]; then
       echo "[SAFE] Dry-run only. No files modified."
-      echo "[HINT] Add --apply to write auth files; add --restart if you want gateway restart."
+      echo "[HINT] Add --apply to write auth files; restart is default (use --no-restart to skip)."
       echo "[NEXT] cs relogin '<callback-url-or-code>' --apply"
       exit 2
     fi
@@ -580,7 +580,7 @@ case "$cmd" in
     if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (default). Use --restart to enable."
+      echo "[OK] skipped restart (--no-restart)."
     fi
     print_status
     exit 0
@@ -589,7 +589,7 @@ case "$cmd" in
     [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
     pid="$2"
     apply="0"
-    do_restart="0"
+    do_restart="1"
     shift 2
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -610,7 +610,7 @@ case "$cmd" in
     if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (default). Use --restart to enable."
+      echo "[OK] skipped restart (--no-restart)."
     fi
     print_status
     exit 0
@@ -620,7 +620,7 @@ case "$cmd" in
     shift
     pid="$DEFAULT_PROFILE_ID"
     apply="0"
-    do_restart="0"
+    do_restart="1"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -654,7 +654,7 @@ case "$cmd" in
     if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (default). Use --restart to enable."
+      echo "[OK] skipped restart (--no-restart)."
     fi
     print_status
     exit 0
