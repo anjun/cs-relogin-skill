@@ -61,7 +61,7 @@ cs status
 cs relogin
 
 # 4) 将回调 URL 或 code 粘贴回终端完成登录
-cs relogin '<callback-url-or-code>'
+cs relogin '<callback-url-or-code>' --apply [--restart]
 ```
 
 ## OpenClaw Skill 安装
@@ -96,10 +96,14 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
+安全默认值（v1.1.0+）：
+- 涉及写入认证文件的操作必须显式加 `--apply`
+- 默认不重启 gateway；仅在传入 `--restart` 时重启
+
 ## 常见命令
 
 - `cs relogin`
-- `cs relogin '<callback-url-or-code>'`
+- `cs relogin '<callback-url-or-code>' --apply [--restart]`
 - `cs relogin status`
 - `cs status`
 

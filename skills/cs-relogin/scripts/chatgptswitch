@@ -19,11 +19,11 @@ usage() {
   cat <<'USAGE'
 Usage:
   chatgptswitch relogin
-  chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] [--no-restart]
+  chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] --apply [--restart]
   chatgptswitch relogin status
 
-  chatgptswitch <source-json-path> [--profile-id <id>] [--no-restart]
-  chatgptswitch use <profile-id> [--no-restart]
+  chatgptswitch <source-json-path> [--profile-id <id>] --apply [--restart]
+  chatgptswitch use <profile-id> --apply [--restart]
   chatgptswitch list
   chatgptswitch status
 
@@ -31,10 +31,11 @@ Description:
   A) Recommended account switch (non-interactive):
      1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
      2) login in your LOCAL browser and copy callback URL
-     3) `cs relogin "<callback-url>"` completes login, writes auth-profiles, restarts gateway
+     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (default no restart)
 
   B) Legacy import/switch:
      - Import a profile JSON directly, or switch existing profile id.
+     - All write operations require explicit `--apply`.
 
 Short alias:
   cs
@@ -567,7 +568,8 @@ case "$cmd" in
     callback_input="$1"
     shift
     pid=""
-    no_restart="0"
+    apply="0"
+    do_restart="0"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -575,8 +577,14 @@ case "$cmd" in
           [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
           pid="$1"
           ;;
+        --apply)
+          apply="1"
+          ;;
+        --restart)
+          do_restart="1"
+          ;;
         --no-restart)
-          no_restart="1"
+          do_restart="0"
           ;;
         *)
           echo "[ERR] unknown option: $1" >&2
@@ -586,12 +594,19 @@ case "$cmd" in
       shift
     done
 
+    if [ "$apply" != "1" ]; then
+      echo "[SAFE] Dry-run only. No files modified."
+      echo "[HINT] Add --apply to write auth files; add --restart if you want gateway restart."
+      echo "[NEXT] cs relogin '<callback-url-or-code>' --apply"
+      exit 2
+    fi
+
     res="$(relogin_complete "$callback_input" "$pid")"
     echo "[OK] relogin completed: $res"
-    if [ "$no_restart" = "0" ]; then
+    if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (--no-restart)"
+      echo "[OK] skipped restart (default). Use --restart to enable."
     fi
     print_status
     exit 0
@@ -599,21 +614,29 @@ case "$cmd" in
   use)
     [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
     pid="$2"
-    no_restart="0"
+    apply="0"
+    do_restart="0"
     shift 2
     while [ $# -gt 0 ]; do
       case "$1" in
-        --no-restart) no_restart="1" ;;
+        --apply) apply="1" ;;
+        --restart) do_restart="1" ;;
+        --no-restart) do_restart="0" ;;
         *) echo "[ERR] unknown option: $1" >&2; exit 1 ;;
       esac
       shift
     done
+    if [ "$apply" != "1" ]; then
+      echo "[SAFE] Dry-run only. No files modified."
+      echo "[NEXT] cs use '$pid' --apply"
+      exit 2
+    fi
     n="$(switch_existing "$pid")"
     echo "[OK] switched to existing profile: $pid (files=$n)"
-    if [ "$no_restart" = "0" ]; then
+    if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (--no-restart)"
+      echo "[OK] skipped restart (default). Use --restart to enable."
     fi
     print_status
     exit 0
@@ -622,7 +645,8 @@ case "$cmd" in
     src="$1"
     shift
     pid="$DEFAULT_PROFILE_ID"
-    no_restart="0"
+    apply="0"
+    do_restart="0"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -630,8 +654,14 @@ case "$cmd" in
           [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
           pid="$1"
           ;;
+        --apply)
+          apply="1"
+          ;;
+        --restart)
+          do_restart="1"
+          ;;
         --no-restart)
-          no_restart="1"
+          do_restart="0"
           ;;
         *)
           echo "[ERR] unknown option: $1" >&2
@@ -640,12 +670,17 @@ case "$cmd" in
       esac
       shift
     done
+    if [ "$apply" != "1" ]; then
+      echo "[SAFE] Dry-run only. No files modified."
+      echo "[NEXT] cs '$src' --profile-id '$pid' --apply"
+      exit 2
+    fi
     res="$(apply_import "$src" "$pid")"
     echo "[OK] imported profile: $res"
-    if [ "$no_restart" = "0" ]; then
+    if [ "$do_restart" = "1" ]; then
       restart_gateway
     else
-      echo "[OK] skipped restart (--no-restart)"
+      echo "[OK] skipped restart (default). Use --restart to enable."
     fi
     print_status
     exit 0

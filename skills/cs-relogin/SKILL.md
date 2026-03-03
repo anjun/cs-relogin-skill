@@ -18,7 +18,9 @@ This skill bundles executables in `scripts/`:
 - Always execute bundled `scripts/cs`; do not depend on global `cs` in PATH.
 - Never call `openclaw onboard` for this task.
 - Keep flow non-interactive.
-- If user provided callback URL/code, complete relogin immediately.
+- All write operations must pass explicit `--apply`.
+- Restart is opt-in (`--restart`), default is no restart.
+- If user provided callback URL/code, complete relogin immediately with `--apply`.
 
 ## Path rule (MUST)
 
@@ -41,10 +43,11 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
    - Ask user to complete browser auth and paste callback URL.
 
 2. If user input contains callback URL/code:
-   - Run:
+   - Run with explicit apply:
      ```bash
-     "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>"
+     "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply
      ```
+   - Only add `--restart` when user explicitly asks to restart gateway.
    - Return key lines:
      - relogin completed status
      - gateway restart status

@@ -67,7 +67,7 @@ cs status
 cs relogin
 
 # 4) Paste callback URL/code to finish
-cs relogin '<callback-url-or-code>'
+cs relogin '<callback-url-or-code>' --apply [--restart]
 ```
 
 ## Compatibility review
@@ -78,6 +78,10 @@ cs relogin '<callback-url-or-code>'
 - **Windows native**: ❌ not supported for now (unless you bring your own Bash runtime such as Git Bash/WSL)
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
+
+Safe defaults (v1.1.0+):
+- Write operations require explicit `--apply`
+- Gateway restart is disabled by default; only enabled with `--restart`
 
 ## OpenClaw Skill install
 
@@ -100,7 +104,7 @@ unzip -l dist/cs-relogin.skill
 ## Typical commands
 
 - `cs relogin`
-- `cs relogin '<callback-url-or-code>'`
+- `cs relogin '<callback-url-or-code>' --apply [--restart]`
 - `cs relogin status`
 - `cs status`
 
