@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_RAW_DEFAULT="https://raw.githubusercontent.com/anjun/cs-relogin-skill/master"
+CS_RELOGIN_REF="${CS_RELOGIN_REF:-v1.1.0}"
+REPO_RAW_DEFAULT="https://raw.githubusercontent.com/anjun/cs-relogin-skill/${CS_RELOGIN_REF}"
 REPO_RAW="${CS_RELOGIN_RAW_BASE:-$REPO_RAW_DEFAULT}"
 INSTALL_DIR="${CS_RELOGIN_INSTALL_DIR:-$HOME/.local/bin}"
 

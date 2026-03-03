@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.0/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,7 +52,7 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.0/install.sh | bash
 
 # 2) 查看当前状态
 cs status
