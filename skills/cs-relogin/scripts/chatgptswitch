@@ -520,12 +520,8 @@ case "$cmd" in
     shift
     if [ $# -eq 0 ]; then
       url="$(relogin_begin "$DEFAULT_PROFILE_ID")"
-      echo "[OK] New Codex login URL generated."
-      echo
+      # URL-only output for downstream agents/parsers
       echo "$url"
-      echo
-      echo "登录完成后执行:"
-      echo "  cs relogin '<callback-url>'"
       exit 0
     fi
 
