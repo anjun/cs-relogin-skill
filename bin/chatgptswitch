@@ -273,7 +273,6 @@ import base64, glob, json, os, shutil, sys, tempfile, time
 from urllib.parse import parse_qs, urlparse, urlencode
 from urllib.request import Request, urlopen, build_opener, ProxyHandler
 from urllib.error import HTTPError, URLError
-import socket
 
 pending_path, callback_input, profile_override, default_profile, state_dir = sys.argv[1:6]
 state_dir = os.path.expanduser(state_dir)
@@ -341,18 +340,6 @@ body = urlencode({
     'redirect_uri': redirect_uri,
 }).encode()
 
-def _proxy_listen_ok(proxy_url: str) -> bool:
-    try:
-        u = urlparse(proxy_url)
-        host = u.hostname or ''
-        port = u.port or (443 if (u.scheme or '').lower() == 'https' else 80)
-        if not host:
-            return False
-        with socket.create_connection((host, port), timeout=1.2):
-            return True
-    except Exception:
-        return False
-
 def _exchange_with_proxy(proxy):
     req = Request(token_url, data=body, method='POST', headers={
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -366,22 +353,16 @@ def _exchange_with_proxy(proxy):
     with urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode('utf-8', 'replace')), None
 
-proxy_env = (os.environ.get('CHATGPTSWITCH_PROXY') or os.environ.get('ALL_PROXY') or os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY') or '').strip()
-proxy_fallback = (os.environ.get('CHATGPTSWITCH_PROXY_FALLBACK') or 'http://127.0.0.1:7890').strip()
-proxy_auto = (os.environ.get('CHATGPTSWITCH_PROXY_AUTO') or '1').strip() != '0'
-
-attempts = []
-if proxy_env:
-    attempts.append(proxy_env)
-else:
-    attempts.append(None)
-    if proxy_auto and proxy_fallback and _proxy_listen_ok(proxy_fallback):
-        attempts.append(proxy_fallback)
+# Compliance-safe default:
+# - No automatic proxy fallback
+# - Proxy only when explicitly provided by CHATGPTSWITCH_PROXY
+proxy_env = (os.environ.get('CHATGPTSWITCH_PROXY') or '').strip()
+attempts = [proxy_env] if proxy_env else [None]
 
 last_err = None
 used_proxy = None
 data = None
-for idx, px in enumerate(attempts):
+for px in attempts:
     try:
         data, used_proxy = _exchange_with_proxy(px)
         break
@@ -392,22 +373,15 @@ for idx, px in enumerate(attempts):
         except Exception:
             pass
         last_err = f'HTTP {e.code}: {detail or e.reason}'
-        unsupported_region = 'unsupported_country_region_territory' in detail
-        if idx + 1 < len(attempts) and (px is None) and unsupported_region:
-            continue
         break
     except (URLError, TimeoutError, OSError) as e:
         last_err = str(e)
-        if idx + 1 < len(attempts):
-            continue
         break
     except Exception as e:
         last_err = str(e)
         break
 
 if data is None:
-    if len(attempts) > 1:
-        raise SystemExit(f'[ERR] token exchange failed (direct/proxy tried): {last_err}')
     raise SystemExit(f'[ERR] token exchange failed: {last_err}')
 
 access = str(data.get('access_token', '')).strip()

@@ -20,6 +20,7 @@ This skill bundles executables in `scripts/`:
 - Keep flow non-interactive.
 - All write operations must pass explicit `--apply`.
 - Restart is opt-in (`--restart`), default is no restart.
+- Do not set or auto-enable proxy fallback; only use proxy when user explicitly requests it.
 - If user provided callback URL/code, complete relogin immediately with `--apply`.
 
 ## Path rule (MUST)

@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.2/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,7 +52,7 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.2/install.sh | bash
 
 # 2) 查看当前状态
 cs status
@@ -96,9 +96,10 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
-安全默认值（v1.1.1+）：
+安全默认值（v1.1.2+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
 - 默认不重启 gateway；仅在传入 `--restart` 时重启
+- 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
 
 ## 常见命令
 
