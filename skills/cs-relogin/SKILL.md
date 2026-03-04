@@ -19,7 +19,7 @@ This skill bundles executables in `scripts/`:
 - Never call `openclaw onboard` for this task.
 - Keep flow non-interactive.
 - All write operations must pass explicit `--apply`.
-- Restart is default-on after `--apply`; use `--no-restart` to skip.
+- Restart policy: chat runtime defaults to no-restart to avoid interrupting reply delivery; CLI runtime defaults to restart. Use `--restart` / `--no-restart` to force.
 - Do not set or auto-enable proxy fallback; only use proxy when user explicitly requests it.
 - If user provided callback URL/code, complete relogin immediately with `--apply`.
 
@@ -48,10 +48,10 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      ```bash
      "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply
      ```
-   - Gateway restart is default after `--apply`; add `--no-restart` only when user explicitly asks to skip restart.
+   - Do NOT force gateway restart in the same callback reply flow unless user explicitly requests restart now.
    - Return key lines:
      - relogin completed status
-     - gateway restart status
+     - pending/state check summary
      - active profile/account summary
 
 3. If user asks status/debug:

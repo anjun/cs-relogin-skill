@@ -31,7 +31,7 @@ Description:
   A) Recommended account switch (non-interactive):
      1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
      2) login in your LOCAL browser and copy callback URL
-     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (default auto restart; use --no-restart to skip)
+     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (chat内默认不重启；CLI默认重启，可用 --no-restart/--restart 显式控制)
 
   B) Legacy import/switch:
      - Import a profile JSON directly, or switch existing profile id.
@@ -47,6 +47,20 @@ need_cmd() {
     echo "[ERR] Missing command: $1" >&2
     exit 1
   }
+}
+
+inside_gateway_service() {
+  grep -q "openclaw-gateway.service" /proc/self/cgroup 2>/dev/null
+}
+
+default_do_restart() {
+  if inside_gateway_service; then
+    # Running inside gateway chat worker: avoid self-restart interrupting reply.
+    echo "${CHATGPTSWITCH_GATEWAY_DEFAULT_RESTART:-0}"
+  else
+    # Running from normal shell/SSH: keep historical behavior (restart by default).
+    echo "${CHATGPTSWITCH_DEFAULT_RESTART:-1}"
+  fi
 }
 
 print_status() {
@@ -539,7 +553,7 @@ case "$cmd" in
     shift
     pid=""
     apply="0"
-    do_restart="1"
+    do_restart="$(default_do_restart)"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -566,7 +580,7 @@ case "$cmd" in
 
     if [ "$apply" != "1" ]; then
       echo "[SAFE] Dry-run only. No files modified."
-      echo "[HINT] Add --apply to write auth files; restart is default (use --no-restart to skip)."
+      echo "[HINT] Add --apply to write auth files; restart policy depends on runtime (chat内默认不重启, CLI默认重启). Use --restart/--no-restart to force."
       echo "[NEXT] cs relogin '<callback-url-or-code>' --apply"
       exit 2
     fi
@@ -585,7 +599,7 @@ case "$cmd" in
     [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
     pid="$2"
     apply="0"
-    do_restart="1"
+    do_restart="$(default_do_restart)"
     shift 2
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -616,7 +630,7 @@ case "$cmd" in
     shift
     pid="$DEFAULT_PROFILE_ID"
     apply="0"
-    do_restart="1"
+    do_restart="$(default_do_restart)"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
