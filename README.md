@@ -98,7 +98,7 @@ unzip -l dist/cs-relogin.skill
 
 安全默认值（v1.1.2+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
-- 默认不重启 gateway；仅在传入 `--restart` 时重启
+- 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认不重启；在 SSH/终端直接执行时默认重启；可用 `--restart` / `--no-restart` 显式覆盖
 - 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
 
 ## 常见命令

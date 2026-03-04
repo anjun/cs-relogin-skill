@@ -81,7 +81,7 @@ Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
 Safe defaults (v1.1.2+):
 - Write operations require explicit `--apply`
-- Gateway restart is disabled by default; only enabled with `--restart`
+- Restart policy is runtime-aware: default no-restart in OpenClaw chat/skill execution, default restart in direct shell/SSH usage; override via `--restart` / `--no-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
 
 ## OpenClaw Skill install
