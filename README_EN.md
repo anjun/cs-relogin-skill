@@ -43,7 +43,7 @@ This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.3/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
 ```
 
 > Native Windows is not supported for now (this project depends on Bash).
@@ -58,7 +58,7 @@ cs relogin status
 
 ```bash
 # 1) Install on the server shell
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.3/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
 
 # 2) Check current account status
 cs status
@@ -79,7 +79,7 @@ cs relogin '<callback-url-or-code>' --apply [--restart]
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
-Safe defaults (v1.1.3+):
+Safe defaults (v1.1.4+):
 - Write operations require explicit `--apply`
 - Restart policy is runtime-aware: default no-restart in OpenClaw chat/skill execution, default restart in direct shell/SSH usage; override via `--restart` / `--no-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
@@ -133,3 +133,16 @@ install.sh
 
 - This tool orchestrates auth login/switch only
 - It should never expose full token values
+
+
+## Callback Flow Recommendation (avoid reply-chain stalls)
+
+When finishing callback inside OpenClaw chat, prefer:
+
+```bash
+cs relogin '<callback-url-or-code>' --apply --no-restart
+```
+
+Why:
+- Avoids gateway restart inside the same reply chain, reducing long stalls/interrupted replies.
+- If callback fails (expired/used code), run `cs relogin status` + `cs status` first; do not auto-run `cs relogin` again in the same turn.

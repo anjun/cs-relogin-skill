@@ -46,7 +46,7 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
 2. If user input contains callback URL/code:
    - Run with explicit apply:
      ```bash
-     "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply
+     "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply --no-restart
      ```
    - Do NOT force gateway restart in the same callback reply flow unless user explicitly requests restart now.
    - Return key lines:
@@ -82,3 +82,12 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
   ```
   then send acknowledgement.
 - Never end silently after execution.
+
+
+## Failure policy (MUST)
+
+- If callback apply fails with OAuth code errors (expired/used/invalid):
+  - Report raw stderr first.
+  - Run `cs relogin status` and `cs status` for confirmation.
+  - Do **NOT** auto-run `cs relogin` to generate a new URL unless user explicitly asks.
+- Never execute `cs relogin` (no-arg) in the same callback message turn after an apply attempt.
