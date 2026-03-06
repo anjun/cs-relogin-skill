@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,7 +52,7 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
 
 # 2) 查看当前状态
 cs status
@@ -61,7 +61,7 @@ cs status
 cs relogin
 
 # 4) 将回调 URL 或 code 粘贴回终端完成登录
-cs relogin '<callback-url-or-code>' --apply [--restart]
+cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]
 ```
 
 ## OpenClaw Skill 安装
@@ -96,15 +96,15 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
-安全默认值（v1.1.4+）：
+安全默认值（v1.1.5+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
-- 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认不重启；在 SSH/终端直接执行时默认重启；可用 `--restart` / `--no-restart` 显式覆盖
+- 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认延迟重启；在 SSH/终端直接执行时默认立即重启；可用 `--restart` / `--no-restart` / `--deferred-restart` 显式覆盖
 - 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
 
 ## 常见命令
 
 - `cs relogin`
-- `cs relogin '<callback-url-or-code>' --apply [--restart]`
+- `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
 - `cs relogin status`
 - `cs status`
 
@@ -139,9 +139,9 @@ install.sh
 在 OpenClaw 聊天里完成回调时，建议使用：
 
 ```bash
-cs relogin '<callback-url-or-code>' --apply --no-restart
+cs relogin '<callback-url-or-code>' --apply --deferred-restart
 ```
 
 说明：
-- 这样可避免在同一条回复链路里触发 gateway 重启，减少“几分钟无响应/中断回复”。
+- 这样会先把当前回复发出去，再自动延迟重启 gateway，避免链路被自己打断。
 - 如果回调失败（code 过期/已使用），先执行 `cs relogin status` + `cs status` 确认，不要在同一回合自动再跑一次 `cs relogin` 生成新链接。

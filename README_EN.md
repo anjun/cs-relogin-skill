@@ -43,7 +43,7 @@ This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
 ```
 
 > Native Windows is not supported for now (this project depends on Bash).
@@ -58,7 +58,7 @@ cs relogin status
 
 ```bash
 # 1) Install on the server shell
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
 
 # 2) Check current account status
 cs status
@@ -67,7 +67,7 @@ cs status
 cs relogin
 
 # 4) Paste callback URL/code to finish
-cs relogin '<callback-url-or-code>' --apply [--restart]
+cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]
 ```
 
 ## Compatibility review
@@ -79,9 +79,9 @@ cs relogin '<callback-url-or-code>' --apply [--restart]
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
-Safe defaults (v1.1.4+):
+Safe defaults (v1.1.5+):
 - Write operations require explicit `--apply`
-- Restart policy is runtime-aware: default no-restart in OpenClaw chat/skill execution, default restart in direct shell/SSH usage; override via `--restart` / `--no-restart`
+- Restart policy is runtime-aware: default deferred restart in OpenClaw chat/skill execution, default immediate restart in direct shell/SSH usage; override via `--restart` / `--no-restart` / `--deferred-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
 
 ## OpenClaw Skill install
@@ -105,7 +105,7 @@ unzip -l dist/cs-relogin.skill
 ## Typical commands
 
 - `cs relogin`
-- `cs relogin '<callback-url-or-code>' --apply [--restart]`
+- `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
 - `cs relogin status`
 - `cs status`
 
@@ -140,9 +140,9 @@ install.sh
 When finishing callback inside OpenClaw chat, prefer:
 
 ```bash
-cs relogin '<callback-url-or-code>' --apply --no-restart
+cs relogin '<callback-url-or-code>' --apply --deferred-restart
 ```
 
 Why:
-- Avoids gateway restart inside the same reply chain, reducing long stalls/interrupted replies.
+- Lets the current reply finish first, then schedules a delayed gateway restart to avoid interrupting delivery.
 - If callback fails (expired/used code), run `cs relogin status` + `cs status` first; do not auto-run `cs relogin` again in the same turn.

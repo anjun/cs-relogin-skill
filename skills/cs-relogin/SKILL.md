@@ -48,7 +48,7 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      ```bash
      "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply --no-restart
      ```
-   - Do NOT force gateway restart in the same callback reply flow unless user explicitly requests restart now.
+   - Prefer delayed restart in the same callback reply flow so the acknowledgement can be delivered first; only force immediate restart if user explicitly requests restart now.
    - Return key lines:
      - relogin completed status
      - pending/state check summary

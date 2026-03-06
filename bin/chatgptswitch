@@ -19,11 +19,11 @@ usage() {
   cat <<'USAGE'
 Usage:
   chatgptswitch relogin
-  chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] --apply [--restart]
+  chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch relogin status
 
-  chatgptswitch <source-json-path> [--profile-id <id>] --apply [--restart]
-  chatgptswitch use <profile-id> --apply [--restart]
+  chatgptswitch <source-json-path> [--profile-id <id>] --apply [--restart|--no-restart|--deferred-restart]
+  chatgptswitch use <profile-id> --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch list
   chatgptswitch status
 
@@ -31,7 +31,7 @@ Description:
   A) Recommended account switch (non-interactive):
      1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
      2) login in your LOCAL browser and copy callback URL
-     3) `cs relogin "<callback-url>" --apply [--restart]` writes auth-profiles (chat内默认不重启；CLI默认重启，可用 --no-restart/--restart 显式控制)
+     3) `cs relogin "<callback-url>" --apply [--restart|--no-restart|--deferred-restart]` writes auth-profiles (chat内默认延迟重启；CLI默认立即重启，可用 --no-restart/--restart/--deferred-restart 显式控制)
 
   B) Legacy import/switch:
      - Import a profile JSON directly, or switch existing profile id.
@@ -53,13 +53,36 @@ inside_gateway_service() {
   grep -q "openclaw-gateway.service" /proc/self/cgroup 2>/dev/null
 }
 
-default_do_restart() {
+inside_gateway_service() {
+  grep -q "openclaw-gateway.service" /proc/self/cgroup 2>/dev/null
+}
+
+normalize_restart_mode() {
+  local raw="${1:-}"
+  local fallback="${2:-no-restart}"
+  case "$raw" in
+    1|true|yes|restart|immediate)
+      echo "restart"
+      ;;
+    0|false|no|none|skip|no-restart)
+      echo "no-restart"
+      ;;
+    deferred|delay|later|scheduled)
+      echo "deferred"
+      ;;
+    *)
+      echo "$fallback"
+      ;;
+  esac
+}
+
+default_restart_mode() {
   if inside_gateway_service; then
-    # Running inside gateway chat worker: avoid self-restart interrupting reply.
-    echo "${CHATGPTSWITCH_GATEWAY_DEFAULT_RESTART:-0}"
+    # Running inside gateway chat worker: schedule a delayed restart so the current reply can finish.
+    normalize_restart_mode "${CHATGPTSWITCH_GATEWAY_DEFAULT_RESTART_MODE:-deferred}" "deferred"
   else
     # Running from normal shell/SSH: keep historical behavior (restart by default).
-    echo "${CHATGPTSWITCH_DEFAULT_RESTART:-1}"
+    normalize_restart_mode "${CHATGPTSWITCH_DEFAULT_RESTART_MODE:-restart}" "restart"
   fi
 }
 
@@ -513,6 +536,52 @@ restart_gateway() {
   exit 1
 }
 
+schedule_restart() {
+  local delay="${CHATGPTSWITCH_DEFER_RESTART_SECONDS:-15}"
+  case "$delay" in
+    ''|*[!0-9]*) delay="15" ;;
+  esac
+
+  if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+    local unit="chatgptswitch-restart-$(date +%s)"
+    if systemd-run --user --unit "$unit" --on-active="${delay}s" /bin/sh -lc "systemctl --user restart '$SERVICE_NAME' >/dev/null 2>&1 || openclaw gateway restart >/dev/null 2>&1" >/dev/null 2>&1; then
+      echo "[OK] scheduled restart in ${delay}s ($SERVICE_NAME via systemd-run)"
+      return 0
+    fi
+  fi
+
+  if command -v nohup >/dev/null 2>&1; then
+    if nohup /bin/sh -lc "sleep '$delay'; systemctl --user restart '$SERVICE_NAME' >/dev/null 2>&1 || openclaw gateway restart >/dev/null 2>&1" >/dev/null 2>&1 & then
+      echo "[OK] scheduled restart in ${delay}s (background fallback)"
+      return 0
+    fi
+  fi
+
+  echo "[ERR] failed to schedule deferred restart." >&2
+  echo "[HINT] run one of:" >&2
+  echo "  systemctl --user restart $SERVICE_NAME" >&2
+  echo "  openclaw gateway restart" >&2
+  exit 1
+}
+
+run_restart_mode() {
+  case "$1" in
+    restart)
+      restart_gateway
+      ;;
+    deferred)
+      schedule_restart
+      ;;
+    no-restart)
+      echo "[OK] skipped restart (--no-restart)."
+      ;;
+    *)
+      echo "[ERR] unknown restart mode: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
 need_cmd python3
 
 if [ $# -eq 0 ]; then
@@ -553,7 +622,7 @@ case "$cmd" in
     shift
     pid=""
     apply="0"
-    do_restart="$(default_do_restart)"
+    restart_mode="$(default_restart_mode)"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -565,10 +634,13 @@ case "$cmd" in
           apply="1"
           ;;
         --restart)
-          do_restart="1"
+          restart_mode="restart"
+          ;;
+        --deferred-restart)
+          restart_mode="deferred"
           ;;
         --no-restart)
-          do_restart="0"
+          restart_mode="no-restart"
           ;;
         *)
           echo "[ERR] unknown option: $1" >&2
@@ -580,18 +652,14 @@ case "$cmd" in
 
     if [ "$apply" != "1" ]; then
       echo "[SAFE] Dry-run only. No files modified."
-      echo "[HINT] Add --apply to write auth files; restart policy depends on runtime (chat内默认不重启, CLI默认重启). Use --restart/--no-restart to force."
+      echo "[HINT] Add --apply to write auth files; restart policy depends on runtime (chat内默认延迟重启, CLI默认立即重启). Use --restart/--no-restart/--deferred-restart to force."
       echo "[NEXT] cs relogin '<callback-url-or-code>' --apply"
       exit 2
     fi
 
     res="$(relogin_complete "$callback_input" "$pid")"
     echo "[OK] relogin completed: $res"
-    if [ "$do_restart" = "1" ]; then
-      restart_gateway
-    else
-      echo "[OK] skipped restart (--no-restart)."
-    fi
+    run_restart_mode "$restart_mode"
     print_status
     exit 0
     ;;
@@ -599,13 +667,14 @@ case "$cmd" in
     [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
     pid="$2"
     apply="0"
-    do_restart="$(default_do_restart)"
+    restart_mode="$(default_restart_mode)"
     shift 2
     while [ $# -gt 0 ]; do
       case "$1" in
         --apply) apply="1" ;;
-        --restart) do_restart="1" ;;
-        --no-restart) do_restart="0" ;;
+        --restart) restart_mode="restart" ;;
+        --deferred-restart) restart_mode="deferred" ;;
+        --no-restart) restart_mode="no-restart" ;;
         *) echo "[ERR] unknown option: $1" >&2; exit 1 ;;
       esac
       shift
@@ -617,11 +686,7 @@ case "$cmd" in
     fi
     n="$(switch_existing "$pid")"
     echo "[OK] switched to existing profile: $pid (files=$n)"
-    if [ "$do_restart" = "1" ]; then
-      restart_gateway
-    else
-      echo "[OK] skipped restart (--no-restart)."
-    fi
+    run_restart_mode "$restart_mode"
     print_status
     exit 0
     ;;
@@ -630,7 +695,7 @@ case "$cmd" in
     shift
     pid="$DEFAULT_PROFILE_ID"
     apply="0"
-    do_restart="$(default_do_restart)"
+    restart_mode="$(default_restart_mode)"
     while [ $# -gt 0 ]; do
       case "$1" in
         --profile-id)
@@ -642,10 +707,13 @@ case "$cmd" in
           apply="1"
           ;;
         --restart)
-          do_restart="1"
+          restart_mode="restart"
+          ;;
+        --deferred-restart)
+          restart_mode="deferred"
           ;;
         --no-restart)
-          do_restart="0"
+          restart_mode="no-restart"
           ;;
         *)
           echo "[ERR] unknown option: $1" >&2
@@ -661,11 +729,7 @@ case "$cmd" in
     fi
     res="$(apply_import "$src" "$pid")"
     echo "[OK] imported profile: $res"
-    if [ "$do_restart" = "1" ]; then
-      restart_gateway
-    else
-      echo "[OK] skipped restart (--no-restart)."
-    fi
+    run_restart_mode "$restart_mode"
     print_status
     exit 0
     ;;
