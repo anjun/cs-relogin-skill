@@ -1,6 +1,6 @@
 ---
 name: cs-relogin
-description: Self-contained OpenClaw skill for Codex OAuth account switch (relogin/status) without relying on system-wide `cs` install. Use when user says `cs relogin`, asks to switch ChatGPT Codex account, or provides OAuth callback URL/code.
+description: Self-contained OpenClaw skill for Codex OAuth account switch (relogin/use/status/remove) without relying on system-wide `cs` install. Use when user says `cs relogin`, asks to switch ChatGPT Codex account, asks to switch to a saved alias, or provides OAuth callback URL/code.
 allowed-tools: ["Bash(*cs*)", "Bash(*chatgptswitch*)"]
 metadata: {"clawdbot":{"emoji":"🔐"}}
 ---
@@ -35,7 +35,16 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
 
 ## Workflow
 
-1. If user input is exactly `cs relogin`:
+1. If user asks to switch to an existing saved alias:
+   - Run:
+     ```bash
+     "$SKILL_DIR/scripts/cs" use "<alias>" --apply --no-restart
+     ```
+   - Return:
+     - switched alias
+     - active profile/account summary
+
+2. If user input is exactly `cs relogin` or asks to add/login a new account alias:
    - Run:
      ```bash
      "$SKILL_DIR/scripts/cs" relogin
@@ -43,7 +52,7 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
    - Return login URL from output.
    - Ask user to complete browser auth and paste callback URL.
 
-2. If user input contains callback URL/code:
+3. If user input contains callback URL/code:
    - Run with explicit apply:
      ```bash
      "$SKILL_DIR/scripts/cs" relogin "<callback-url-or-code>" --apply --no-restart
@@ -54,7 +63,16 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      - pending/state check summary
      - active profile/account summary
 
-3. If user asks status/debug:
+4. If user asks to delete a saved alias:
+   - Run:
+     ```bash
+     "$SKILL_DIR/scripts/cs" remove "<alias>" --apply --no-restart
+     ```
+   - Return:
+     - removed alias
+     - active profile/account summary
+
+5. If user asks status/debug:
    - Run:
      ```bash
      "$SKILL_DIR/scripts/cs" relogin status

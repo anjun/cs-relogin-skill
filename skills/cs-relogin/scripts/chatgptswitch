@@ -19,22 +19,25 @@ usage() {
   cat <<'USAGE'
 Usage:
   chatgptswitch relogin
+  chatgptswitch relogin <alias>
   chatgptswitch relogin <callback-url-or-code> [--profile-id <id>] --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch relogin status
 
   chatgptswitch <source-json-path> [--profile-id <id>] --apply [--restart|--no-restart|--deferred-restart]
-  chatgptswitch use <profile-id> --apply [--restart|--no-restart|--deferred-restart]
+  chatgptswitch use <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]
+  chatgptswitch remove <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch list
   chatgptswitch status
 
 Description:
   A) Recommended account switch (non-interactive):
-     1) `cs relogin` prints a fresh Codex OAuth login URL (PKCE/state bound)
+     1) `cs relogin personal` / `cs relogin work` prints a fresh Codex OAuth login URL (PKCE/state bound)
      2) login in your LOCAL browser and copy callback URL
-     3) `cs relogin "<callback-url>" --apply [--restart|--no-restart|--deferred-restart]` writes auth-profiles (chat内默认延迟重启；CLI默认立即重启，可用 --no-restart/--restart/--deferred-restart 显式控制)
+     3) `cs relogin "<callback-url>" --apply [--restart|--no-restart|--deferred-restart]` writes auth-profiles into the alias/profile selected in step 1
+     4) next time use `cs use personal --apply` or `cs use work --apply` to switch directly
 
   B) Legacy import/switch:
-     - Import a profile JSON directly, or switch existing profile id.
+     - Import a profile JSON directly, switch existing profile id/alias, or delete a saved profile.
      - All write operations require explicit `--apply`.
 
 Short alias:
@@ -86,6 +89,29 @@ default_restart_mode() {
   fi
 }
 
+profile_id_from_alias() {
+  local raw="${1:-}"
+  raw="${raw#openai-codex:}"
+  raw="${raw// /-}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  [ -n "$raw" ] || raw="default"
+  printf 'openai-codex:%s\n' "$raw"
+}
+
+alias_from_profile_id() {
+  local pid="${1:-}"
+  if [[ "$pid" == openai-codex:* ]]; then
+    printf '%s\n' "${pid#openai-codex:}"
+  else
+    printf '%s\n' "$pid"
+  fi
+}
+
+is_callback_like() {
+  local value="${1:-}"
+  [[ "$value" == http://* || "$value" == https://* || "$value" == *"code="* || "$value" == *"#"* ]]
+}
+
 print_status() {
   if [ ! -f "$MAIN_AUTH_FILE" ]; then
     echo "[ERR] auth file not found: $MAIN_AUTH_FILE" >&2
@@ -101,7 +127,7 @@ profiles = data.get('profiles', {})
 active = data.get('lastGood', {}).get('openai-codex', '')
 print(f"auth_file: {p}")
 print(f"profiles: {len(profiles)}")
-print(f"active: {active or '(none)'}")
+print(f"active: {active or '(none)'} alias={(active.split(':', 1)[1] if ':' in active else active) or '(none)'}")
 for pid, prof in profiles.items():
     if prof.get('provider') != 'openai-codex':
         continue
@@ -121,13 +147,16 @@ for pid, prof in profiles.items():
             pass
     mark = '*' if pid == active else ' '
     expires = prof.get('expires', '')
-    print(f"{mark} {pid} accountId={account_id or '-'} email={email or '-'} expires={expires or '-'}")
+    alias = pid.split(':', 1)[1] if ':' in pid else pid
+    print(f"{mark} {pid} alias={alias or '-'} accountId={account_id or '-'} email={email or '-'} expires={expires or '-'}")
 if os.path.exists(pending):
     try:
         with open(pending, encoding='utf-8') as f:
             x = json.load(f)
         age = int(time.time() * 1000) - int(x.get('createdAt', 0) or 0)
-        print(f"pending_relogin: yes profileId={x.get('profileId','-')} ageMs={max(age,0)}")
+        profile_id = x.get('profileId', '-')
+        alias = profile_id.split(':', 1)[1] if ':' in profile_id else profile_id
+        print(f"pending_relogin: yes profileId={profile_id} alias={alias} ageMs={max(age,0)}")
     except Exception:
         print("pending_relogin: yes (unreadable)")
 else:
@@ -249,6 +278,146 @@ for p in paths:
 if updated == 0:
     raise SystemExit(f'[ERR] profile not found in any file: {profile_id}')
 print(updated)
+PY
+}
+
+sync_session_profile_overrides() {
+  local target_profile_id="${1:-}"
+  local removed_profile_id="${2:-}"
+
+  python3 - "$STATE_DIR" "$target_profile_id" "$removed_profile_id" <<'PY'
+import json, os, sys, tempfile, shutil
+
+state_dir = os.path.expanduser(sys.argv[1])
+target_profile_id = (sys.argv[2] or '').strip()
+removed_profile_id = (sys.argv[3] or '').strip()
+sessions_path = os.path.join(state_dir, 'agents', 'main', 'sessions', 'sessions.json')
+if not os.path.exists(sessions_path):
+    print(0)
+    raise SystemExit(0)
+
+with open(sessions_path, encoding='utf-8') as f:
+    data = json.load(f)
+
+if not isinstance(data, dict):
+    print(0)
+    raise SystemExit(0)
+
+updated = 0
+target_alias = target_profile_id.split(':', 1)[1] if ':' in target_profile_id else target_profile_id
+
+for key, session in data.items():
+    if not isinstance(session, dict):
+        continue
+    current_profile = (session.get('authProfileOverride') or '').strip()
+    should_update = False
+
+    if removed_profile_id:
+        should_update = (current_profile == removed_profile_id)
+    elif target_profile_id:
+        if key.startswith('agent:main:feishu:direct:') or current_profile.startswith('openai-codex:'):
+            should_update = True
+
+    if not should_update:
+        continue
+
+    if target_profile_id:
+        session['authProfileOverride'] = target_profile_id
+        session['authProfileOverrideSource'] = 'user'
+        session.pop('authProfileOverrideCompactionCount', None)
+        session['lastAccountId'] = target_alias or session.get('lastAccountId')
+    else:
+        session.pop('authProfileOverride', None)
+        session.pop('authProfileOverrideSource', None)
+        session.pop('authProfileOverrideCompactionCount', None)
+        session.pop('lastAccountId', None)
+    updated += 1
+
+if updated:
+    shutil.copy2(sessions_path, sessions_path + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='sessions.', suffix='.json', dir=os.path.dirname(sessions_path))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, sessions_path)
+
+print(updated)
+PY
+}
+
+remove_existing() {
+  local target_profile_id="$1"
+
+  python3 - "$target_profile_id" "$STATE_DIR" <<'PY'
+import json, os, sys, glob, tempfile, shutil
+
+profile_id, state_dir = sys.argv[1], os.path.expanduser(sys.argv[2])
+paths = sorted(glob.glob(os.path.join(state_dir, 'agents', '*', 'agent', 'auth-profiles.json')))
+if not paths:
+    raise SystemExit('[ERR] no auth-profiles.json found under agents/*/agent')
+
+updated = 0
+found = False
+next_active = ''
+
+for p in paths:
+    with open(p, encoding='utf-8') as f:
+        data = json.load(f)
+    profiles = data.get('profiles', {})
+    if profile_id not in profiles:
+        continue
+    found = True
+    profiles.pop(profile_id, None)
+    usage = data.setdefault('usageStats', {})
+    usage.pop(profile_id, None)
+    last_good = data.setdefault('lastGood', {})
+    if last_good.get('openai-codex') == profile_id:
+        remaining = sorted(k for k, v in profiles.items() if isinstance(v, dict) and v.get('provider') == 'openai-codex')
+        if remaining:
+            last_good['openai-codex'] = remaining[0]
+            next_active = remaining[0]
+        else:
+            last_good.pop('openai-codex', None)
+            next_active = ''
+    else:
+        next_active = last_good.get('openai-codex', '')
+    shutil.copy2(p, p + '.bak.last')
+    fd, tmp = tempfile.mkstemp(prefix='auth-profiles.', suffix='.json', dir=os.path.dirname(p))
+    os.close(fd)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, p)
+    updated += 1
+
+cfg_path = os.path.join(state_dir, 'openclaw.json')
+cfg_updated = False
+if os.path.exists(cfg_path):
+    with open(cfg_path, encoding='utf-8') as f:
+        cfg = json.load(f)
+    auth_profiles = cfg.setdefault('auth', {}).setdefault('profiles', {})
+    if profile_id in auth_profiles:
+        found = True
+        auth_profiles.pop(profile_id, None)
+        shutil.copy2(cfg_path, cfg_path + '.bak.last')
+        fd, tmp = tempfile.mkstemp(prefix='openclaw.', suffix='.json', dir=os.path.dirname(cfg_path))
+        os.close(fd)
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+            f.write('\n')
+        os.replace(tmp, cfg_path)
+        cfg_updated = True
+
+if not found:
+    raise SystemExit(f'[ERR] profile not found: {profile_id}')
+
+print(json.dumps({
+    "profileId": profile_id,
+    "filesUpdated": updated,
+    "configUpdated": cfg_updated,
+    "nextActive": next_active
+}, ensure_ascii=False))
 PY
 }
 
@@ -603,7 +772,6 @@ case "$cmd" in
     shift
     if [ $# -eq 0 ]; then
       url="$(relogin_begin "$DEFAULT_PROFILE_ID")"
-      # URL-only output for downstream agents/parsers
       echo "$url"
       exit 0
     fi
@@ -618,8 +786,9 @@ case "$cmd" in
       exit 0
     fi
 
-    callback_input="$1"
+    first_arg="$1"
     shift
+    callback_input=""
     pid=""
     apply="0"
     restart_mode="$(default_restart_mode)"
@@ -628,7 +797,7 @@ case "$cmd" in
         --profile-id)
           shift
           [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
-          pid="$1"
+          pid="$(profile_id_from_alias "$1")"
           ;;
         --apply)
           apply="1"
@@ -650,6 +819,16 @@ case "$cmd" in
       shift
     done
 
+    if [ "$apply" != "1" ] && ! is_callback_like "$first_arg"; then
+      pid="${pid:-$(profile_id_from_alias "$first_arg")}"
+      url="$(relogin_begin "$pid")"
+      echo "[OK] relogin target: $pid (alias=$(alias_from_profile_id "$pid"))" >&2
+      echo "$url"
+      exit 0
+    fi
+
+    callback_input="$first_arg"
+
     if [ "$apply" != "1" ]; then
       echo "[SAFE] Dry-run only. No files modified."
       echo "[HINT] Add --apply to write auth files; restart policy depends on runtime (chat内默认延迟重启, CLI默认立即重启). Use --restart/--no-restart/--deferred-restart to force."
@@ -658,14 +837,22 @@ case "$cmd" in
     fi
 
     res="$(relogin_complete "$callback_input" "$pid")"
+    actual_pid="$(python3 - "$res" <<'PY'
+import json, sys
+obj = json.loads(sys.argv[1])
+print(obj.get('profileId', ''))
+PY
+)"
+    sync_n="$(sync_session_profile_overrides "$actual_pid" "")"
     echo "[OK] relogin completed: $res"
+    echo "[OK] synced session auth profile overrides: $sync_n"
     run_restart_mode "$restart_mode"
     print_status
     exit 0
     ;;
   use)
     [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
-    pid="$2"
+    pid="$(profile_id_from_alias "$2")"
     apply="0"
     restart_mode="$(default_restart_mode)"
     shift 2
@@ -685,7 +872,44 @@ case "$cmd" in
       exit 2
     fi
     n="$(switch_existing "$pid")"
+    sync_n="$(sync_session_profile_overrides "$pid" "")"
     echo "[OK] switched to existing profile: $pid (files=$n)"
+    echo "[OK] synced session auth profile overrides: $sync_n"
+    run_restart_mode "$restart_mode"
+    print_status
+    exit 0
+    ;;
+  remove)
+    [ $# -ge 2 ] || { echo "[ERR] missing profile-id" >&2; exit 1; }
+    pid="$(profile_id_from_alias "$2")"
+    apply="0"
+    restart_mode="$(default_restart_mode)"
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --apply) apply="1" ;;
+        --restart) restart_mode="restart" ;;
+        --deferred-restart) restart_mode="deferred" ;;
+        --no-restart) restart_mode="no-restart" ;;
+        *) echo "[ERR] unknown option: $1" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    if [ "$apply" != "1" ]; then
+      echo "[SAFE] Dry-run only. No files modified."
+      echo "[NEXT] cs remove '$pid' --apply"
+      exit 2
+    fi
+    res="$(remove_existing "$pid")"
+    next_pid="$(python3 - "$res" <<'PY'
+import json, sys
+obj = json.loads(sys.argv[1])
+print(obj.get('nextActive', ''))
+PY
+)"
+    sync_n="$(sync_session_profile_overrides "$next_pid" "$pid")"
+    echo "[OK] removed profile: $res"
+    echo "[OK] synced session auth profile overrides: $sync_n"
     run_restart_mode "$restart_mode"
     print_status
     exit 0
@@ -701,7 +925,7 @@ case "$cmd" in
         --profile-id)
           shift
           [ $# -gt 0 ] || { echo "[ERR] --profile-id requires value" >&2; exit 1; }
-          pid="$1"
+          pid="$(profile_id_from_alias "$1")"
           ;;
         --apply)
           apply="1"

@@ -8,7 +8,7 @@
 
 ## 核心用途
 
-> 自动化 `cs relogin`：生成登录链接 → 粘贴 callback → 完成登录 → 回报当前账号状态。
+> 自动化 `cs relogin` / `cs use` / `cs remove`：生成登录链接 → 粘贴 callback → 保存 alias → 直接切换账号 → 回报当前状态。
 
 并且：**每一步都给明确回执**（执行了什么、成功/失败、当前状态）。
 
@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.0/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,16 +52,19 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.1.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.0/install.sh | bash
 
 # 2) 查看当前状态
 cs status
 
-# 3) 发起重登（会输出 OAuth 链接）
-cs relogin
+# 3) 给新账号建一个 alias（会输出 OAuth 链接）
+cs relogin personal
 
 # 4) 将回调 URL 或 code 粘贴回终端完成登录
 cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]
+
+# 5) 后续直接切换
+cs use personal --apply
 ```
 
 ## OpenClaw Skill 安装
@@ -96,7 +99,7 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
-安全默认值（v1.1.5+）：
+安全默认值（v1.2.0+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
 - 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认延迟重启；在 SSH/终端直接执行时默认立即重启；可用 `--restart` / `--no-restart` / `--deferred-restart` 显式覆盖
 - 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
@@ -104,7 +107,10 @@ unzip -l dist/cs-relogin.skill
 ## 常见命令
 
 - `cs relogin`
+- `cs relogin personal`
 - `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
+- `cs use personal --apply`
+- `cs remove old-account --apply`
 - `cs relogin status`
 - `cs status`
 
