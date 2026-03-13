@@ -99,6 +99,7 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      ```
    - Summarize:
      - patch applied or already present
+     - `compact + pi-embedded` bundle paths for `/status` and `session_status` are both covered
      - backup path
      - before/after verify result
 

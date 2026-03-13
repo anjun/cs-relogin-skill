@@ -16,16 +16,27 @@ STATE_DIR = os.path.expanduser(os.environ.get("OPENCLAW_STATE_DIR", "~/.openclaw
 SESSIONS_PATH = os.path.join(STATE_DIR, "agents", "main", "sessions", "sessions.json")
 AUTH_PROFILES_PATH = os.path.join(STATE_DIR, "agents", "main", "agent", "auth-profiles.json")
 PROXYCHAINS_CONF = os.path.expanduser("~/.config/proxychains/openclaw-gateway.conf")
-PATCH_MARKER = "async function resolveSessionBoundUsageAuth(params) {"
-HELPER_ANCHOR = "//#endregion\n//#region src/auto-reply/reply/commands-status.ts\n"
-BUILD_STATUS_ANCHOR = "async function buildStatusReply(params) {"
-QUEUE_SETTINGS_ANCHOR = "\tconst queueSettings = resolveQueueSettings({\n"
-USAGE_BLOCK_PREFIX = "\tlet usageLine = null;\n"
 STATUS_SESSION_PREFIX = "agent:main:feishu:direct:"
+BUILD_STATUS_ANCHOR = "async function buildStatusReply(params) {"
+COMPACT_GLOB = (
+    "/usr/lib/node_modules/openclaw/dist/compact-*.js",
+    "/usr/local/lib/node_modules/openclaw/dist/compact-*.js",
+)
+PI_EMBEDDED_GLOB = (
+    "/usr/lib/node_modules/openclaw/dist/pi-embedded-*.js",
+    "/usr/local/lib/node_modules/openclaw/dist/pi-embedded-*.js",
+)
+PATCH_MARKER = "async function resolveSessionBoundUsageAuth(params) {"
 
 HELPER_BLOCK = """async function resolveSessionBoundUsageAuth(params) {\n\tconst profileId = params.sessionEntry?.authProfileOverride?.trim();\n\tif (!profileId) return;\n\ttry {\n\t\tconst store = ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });\n\t\tconst cred = store.profiles[profileId];\n\t\tif (!cred || normalizeProviderId(cred.provider) !== params.provider || cred.type !== \"oauth\" && cred.type !== \"token\") return;\n\t\tconst resolved = await resolveApiKeyForProfile({\n\t\t\tcfg: void 0,\n\t\t\tstore,\n\t\t\tprofileId,\n\t\t\tagentDir: params.agentDir\n\t\t});\n\t\tif (!resolved?.apiKey) return;\n\t\tlet token = resolved.apiKey;\n\t\tif (params.provider === \"google-gemini-cli\") token = parseGoogleToken(resolved.apiKey)?.token ?? resolved.apiKey;\n\t\treturn [{\n\t\t\tprovider: params.provider,\n\t\t\ttoken,\n\t\t\taccountId: cred.type === \"oauth\" && \"accountId\" in cred ? cred.accountId : void 0\n\t\t}];\n\t} catch {\n\t\treturn;\n\t}\n}\n"""
 
-USAGE_BLOCK = """\tlet usageLine = null;\n\tif (currentUsageProvider) try {\n\t\tconst usageAuth = await resolveSessionBoundUsageAuth({\n\t\t\tprovider: currentUsageProvider,\n\t\t\tagentDir: statusAgentDir,\n\t\t\tsessionEntry\n\t\t});\n\t\tconst usageEntry = (await loadProviderUsageSummary({\n\t\t\ttimeoutMs: 3500,\n\t\t\tproviders: [currentUsageProvider],\n\t\t\tagentDir: statusAgentDir,\n\t\t\tauth: usageAuth\n\t\t})).providers[0];\n\t\tif (usageEntry && !usageEntry.error && usageEntry.windows.length > 0) {\n\t\t\tconst summaryLine = formatUsageWindowSummary(usageEntry, {\n\t\t\t\tnow: Date.now(),\n\t\t\t\tmaxWindows: 2,\n\t\t\t\tincludeResets: true\n\t\t\t});\n\t\t\tif (summaryLine) usageLine = `📊 Usage: ${summaryLine}`;\n\t\t}\n\t} catch {\n\t\tusageLine = null;\n\t}\n"""
+STATUS_USAGE_BLOCK = """\tlet usageLine = null;\n\tif (currentUsageProvider) try {\n\t\tconst usageAuth = await resolveSessionBoundUsageAuth({\n\t\t\tprovider: currentUsageProvider,\n\t\t\tagentDir: statusAgentDir,\n\t\t\tsessionEntry\n\t\t});\n\t\tconst usageEntry = (await loadProviderUsageSummary({\n\t\t\ttimeoutMs: 3500,\n\t\t\tproviders: [currentUsageProvider],\n\t\t\tagentDir: statusAgentDir,\n\t\t\tauth: usageAuth\n\t\t})).providers[0];\n\t\tif (usageEntry && !usageEntry.error && usageEntry.windows.length > 0) {\n\t\t\tconst summaryLine = formatUsageWindowSummary(usageEntry, {\n\t\t\t\tnow: Date.now(),\n\t\t\t\tmaxWindows: 2,\n\t\t\t\tincludeResets: true\n\t\t\t});\n\t\t\tif (summaryLine) usageLine = `📊 Usage: ${summaryLine}`;\n\t\t}\n\t} catch {\n\t\tusageLine = null;\n\t}\n"""
+
+STATUS_USAGE_OLD = """\tlet usageLine = null;\n\tif (currentUsageProvider) try {\n\t\tconst usageEntry = (await loadProviderUsageSummary({\n\t\t\ttimeoutMs: 3500,\n\t\t\tproviders: [currentUsageProvider],\n\t\t\tagentDir: statusAgentDir\n\t\t})).providers[0];\n"""
+
+SESSION_TOOL_USAGE_OLD = """\t\t\tlet usageLine;\n\t\t\tif (usageProvider) try {\n\t\t\t\tconst snapshot = (await loadProviderUsageSummary({\n\t\t\t\t\ttimeoutMs: 3500,\n\t\t\t\t\tproviders: [usageProvider],\n\t\t\t\t\tagentDir\n\t\t\t\t})).providers.find((entry) => entry.provider === usageProvider);\n"""
+
+SESSION_TOOL_USAGE_NEW = """\t\t\tlet usageLine;\n\t\t\tif (usageProvider) try {\n\t\t\t\tconst usageAuth = await resolveSessionBoundUsageAuth({\n\t\t\t\t\tprovider: usageProvider,\n\t\t\t\t\tagentDir,\n\t\t\t\t\tsessionEntry: resolved.entry\n\t\t\t\t});\n\t\t\t\tconst snapshot = (await loadProviderUsageSummary({\n\t\t\t\t\ttimeoutMs: 3500,\n\t\t\t\t\tproviders: [usageProvider],\n\t\t\t\t\tagentDir,\n\t\t\t\t\tauth: usageAuth\n\t\t\t\t})).providers.find((entry) => entry.provider === usageProvider);\n"""
 
 
 def read_json(path: str):
@@ -33,52 +44,83 @@ def read_json(path: str):
         return json.load(f)
 
 
-def find_compact_file() -> str:
-    candidates = []
-    for pattern in (
-        "/usr/lib/node_modules/openclaw/dist/compact-*.js",
-        "/usr/local/lib/node_modules/openclaw/dist/compact-*.js",
-    ):
+def read_text(path: str) -> str:
+    return pathlib.Path(path).read_text(encoding="utf-8")
+
+
+def find_bundles(patterns: tuple[str, ...], anchor: str) -> list[str]:
+    candidates: list[str] = []
+    for pattern in patterns:
         candidates.extend(glob.glob(pattern))
-    candidates = [p for p in sorted(candidates) if "compact-status-test-" not in p]
-    if not candidates:
-        raise SystemExit("[ERR] OpenClaw compact bundle not found.")
-    for path in candidates:
-        text = pathlib.Path(path).read_text(encoding="utf-8")
-        if BUILD_STATUS_ANCHOR in text:
-            return path
-    raise SystemExit("[ERR] compact bundle found, but buildStatusReply anchor missing.")
+    candidates = [p for p in sorted(candidates) if ".bak." not in p and ".tmpstatus" not in p]
+    matched = [path for path in candidates if anchor in read_text(path)]
+    if not matched:
+        raise SystemExit(f"[ERR] bundle not found for anchor: {anchor}")
+    return matched
 
 
-def is_patched(text: str) -> bool:
-    return PATCH_MARKER in text and "auth: usageAuth" in text
+def find_usage_target_files() -> list[str]:
+    files: list[str] = []
+    files.extend(find_bundles(COMPACT_GLOB, BUILD_STATUS_ANCHOR))
+    files.extend(find_bundles(PI_EMBEDDED_GLOB, BUILD_STATUS_ANCHOR))
+    return sorted(dict.fromkeys(files))
 
 
-def apply_patch(compact_path: str) -> dict:
-    text = pathlib.Path(compact_path).read_text(encoding="utf-8")
-    if is_patched(text):
-        return {"changed": False, "backup": None, "path": compact_path, "alreadyPatched": True}
-    if HELPER_ANCHOR not in text:
-        raise SystemExit("[ERR] helper anchor not found; unsupported OpenClaw bundle layout.")
-    build_idx = text.find(BUILD_STATUS_ANCHOR)
-    if build_idx < 0:
+def ensure_helper(text: str) -> str:
+    if PATCH_MARKER in text:
+        return text
+    idx = text.find(BUILD_STATUS_ANCHOR)
+    if idx < 0:
         raise SystemExit("[ERR] buildStatusReply anchor not found.")
-    usage_start = text.find(USAGE_BLOCK_PREFIX, build_idx)
-    usage_end = text.find(QUEUE_SETTINGS_ANCHOR, usage_start)
-    if usage_start < 0 or usage_end < 0:
-        raise SystemExit("[ERR] usage block anchors not found; unsupported status function layout.")
-    patched_text = text.replace(HELPER_ANCHOR, HELPER_ANCHOR + HELPER_BLOCK, 1)
-    delta = len(patched_text) - len(text)
-    text = patched_text[:usage_start + delta] + USAGE_BLOCK + patched_text[usage_end + delta:]
+    return text[:idx] + HELPER_BLOCK + text[idx:]
+
+
+def patch_status_block(text: str) -> str:
+    if STATUS_USAGE_OLD in text:
+        return text.replace(STATUS_USAGE_OLD, STATUS_USAGE_BLOCK, 1)
+    if "auth: usageAuth" in text and "statusAgentDir" in text:
+        return text
+    raise SystemExit("[ERR] status usage block not found; unsupported bundle layout.")
+
+
+def patch_session_tool_block(text: str) -> str:
+    if SESSION_TOOL_USAGE_OLD in text:
+        return text.replace(SESSION_TOOL_USAGE_OLD, SESSION_TOOL_USAGE_NEW, 1)
+    if "sessionEntry: resolved.entry" in text and "auth: usageAuth" in text:
+        return text
+    raise SystemExit("[ERR] session_status tool usage block not found; unsupported compact layout.")
+
+
+def write_with_backup(path: str, new_text: str, suffix: str) -> str:
     ts = time.strftime("%Y%m%d-%H%M%S")
-    backup = f"{compact_path}.bak.{ts}.status-usage"
-    subprocess.run(["sudo", "cp", compact_path, backup], check=True)
+    backup = f"{path}.bak.{ts}.{suffix}"
+    subprocess.run(["sudo", "cp", path, backup], check=True)
     with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
-        tmp.write(text)
+        tmp.write(new_text)
         tmp_path = tmp.name
-    subprocess.run(["sudo", "install", "-m", "644", tmp_path, compact_path], check=True)
+    subprocess.run(["sudo", "install", "-m", "644", tmp_path, path], check=True)
     os.unlink(tmp_path)
-    return {"changed": True, "backup": backup, "path": compact_path, "alreadyPatched": False}
+    return backup
+
+
+def apply_patch(target_paths: list[str]) -> dict:
+    changed = False
+    backups: list[str] = []
+    patched_paths: list[str] = []
+    for path in target_paths:
+        orig = read_text(path)
+        text = patch_session_tool_block(patch_status_block(ensure_helper(orig)))
+        if text != orig:
+            backups.append(write_with_backup(path, text, "status-usage"))
+            patched_paths.append(path)
+            changed = True
+    return {
+        "changed": changed,
+        "backups": backups,
+        "patchedPaths": patched_paths,
+        "targetPaths": target_paths,
+        "alreadyPatched": not changed,
+    }
 
 
 def find_session_key(explicit_key: Optional[str]) -> str:
@@ -89,9 +131,7 @@ def find_session_key(explicit_key: Optional[str]) -> str:
         return explicit_key
     candidates = []
     for key, entry in sessions.items():
-        if not key.startswith(STATUS_SESSION_PREFIX):
-            continue
-        if key.endswith(":heartbeat") or key.endswith("heartbeat"):
+        if not key.startswith(STATUS_SESSION_PREFIX) or key.endswith(":heartbeat") or key.endswith("heartbeat"):
             continue
         if not isinstance(entry, dict):
             continue
@@ -191,17 +231,28 @@ def expected_usage_line(profile: dict) -> str:
     return f"📊 Usage: {label} {remaining}% left{reset_suffix}"
 
 
-def actual_status_usage_line(compact_path: str, session_key: str) -> str:
+def selected_provider_model(cfg: dict, session_entry: dict) -> tuple[str, str]:
+    primary = cfg.get("agents", {}).get("defaults", {}).get("model", {}).get("primary", "openai-codex/gpt-5.4")
+    provider, _, model = primary.partition("/")
+    provider = (session_entry.get("providerOverride") or provider or "openai-codex").strip()
+    model = (session_entry.get("modelOverride") or model or "gpt-5.4").strip()
+    return provider, model
+
+
+def actual_status_usage_line(bundle_path: str, session_key: str) -> str:
     tmp_js = None
     test_js = None
     try:
-        tmp_js = subprocess.check_output(["sudo", "mktemp", os.path.join(os.path.dirname(compact_path), "compact-status-test-XXXXXX.mjs")], text=True).strip()
-        subprocess.run(["sudo", "cp", compact_path, tmp_js], check=True)
-        subprocess.run(["sudo", "bash", "-lc", f"printf '\nexport {{ buildStatusReply as __buildStatusReply }};\n' >> {tmp_js!s}"], check=True)
+        tmp_js = subprocess.check_output(["sudo", "mktemp", os.path.join(os.path.dirname(bundle_path), "status-test-bundle-XXXXXX.mjs")], text=True).strip()
+        subprocess.run(["sudo", "cp", bundle_path, tmp_js], check=True)
+        subprocess.run(["sudo", "bash", "-lc", f"printf '\nexport {{ buildStatusReply as __buildStatusReply }};\n' >> {tmp_js}"], check=True)
         subprocess.run(["sudo", "chmod", "644", tmp_js], check=True)
+        session_entry, _, _ = current_session_and_profile(session_key)
+        cfg = read_json(os.path.join(STATE_DIR, "openclaw.json"))
+        provider, model = selected_provider_model(cfg, session_entry)
         fd, test_js = tempfile.mkstemp(prefix="status-test-", suffix=".mjs")
         os.close(fd)
-        script = f'''import fs from "fs";\nconst tmp = process.env.TMP_JS;\nconst mod = await import(`file://${{tmp}}`);\nconst sessionsPath = process.env.HOME + "/.openclaw/agents/main/sessions/sessions.json";\nconst cfgPath = process.env.HOME + "/.openclaw/openclaw.json";\nconst sessions = JSON.parse(fs.readFileSync(sessionsPath, "utf8"));\nconst cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));\nconst sessionKey = {json.dumps(session_key)};\nconst sessionEntry = sessions[sessionKey];\nconst providerModel = (cfg.agents?.defaults?.model?.primary || "openai-codex/gpt-5.4").split("/");\nconst provider = providerModel[0] || "openai-codex";\nconst model = providerModel.slice(1).join("/") || "gpt-5.4";\nconst reply = await mod.__buildStatusReply({{\n  cfg,\n  command: {{ isAuthorizedSender: true, senderId: "cs-patch", channel: "feishu" }},\n  sessionEntry,\n  sessionKey,\n  parentSessionKey: null,\n  sessionScope: "direct",\n  storePath: sessionsPath,\n  provider,\n  model,\n  contextTokens: 0,\n  resolvedThinkLevel: cfg.agents?.defaults?.thinkingDefault || "medium",\n  resolvedVerboseLevel: "off",\n  resolvedReasoningLevel: null,\n  resolvedElevatedLevel: cfg.agents?.defaults?.elevatedDefault || "elevated",\n  resolveDefaultThinkingLevel: async () => cfg.agents?.defaults?.thinkingDefault || "medium",\n  isGroup: false,\n  defaultGroupActivation: () => "disabled"\n}});\nconsole.log(reply.text.split("\\n").find((line) => line.includes("Usage:")) || "NO_USAGE_LINE");\n'''
+        script = f'''import fs from "fs";\nconst tmp = process.env.TMP_JS;\nconst mod = await import(`file://${{tmp}}`);\nconst cfg = JSON.parse(fs.readFileSync(process.env.HOME + "/.openclaw/openclaw.json", "utf8"));\nconst sessions = JSON.parse(fs.readFileSync(process.env.HOME + "/.openclaw/agents/main/sessions/sessions.json", "utf8"));\nconst sessionKey = {json.dumps(session_key)};\nconst sessionEntry = sessions[sessionKey];\nconst reply = await mod.__buildStatusReply({{\n  cfg,\n  command: {{ isAuthorizedSender: true, senderId: "cs-patch", channel: "feishu", commandBodyNormalized: "/status" }},\n  sessionEntry,\n  sessionKey,\n  parentSessionKey: null,\n  sessionScope: "direct",\n  storePath: process.env.HOME + "/.openclaw/agents/main/sessions/sessions.json",\n  provider: {json.dumps(provider)},\n  model: {json.dumps(model)},\n  contextTokens: 0,\n  resolvedThinkLevel: cfg.agents?.defaults?.thinkingDefault || "medium",\n  resolvedVerboseLevel: "off",\n  resolvedReasoningLevel: null,\n  resolvedElevatedLevel: cfg.agents?.defaults?.elevatedDefault || "elevated",\n  resolveDefaultThinkingLevel: async () => cfg.agents?.defaults?.thinkingDefault || "medium",\n  isGroup: false,\n  defaultGroupActivation: () => "disabled"\n}});\nconsole.log(reply.text.split("\\n").find((line) => line.includes("Usage:")) || "NO_USAGE_LINE");\n'''
         pathlib.Path(test_js).write_text(script, encoding="utf-8")
         cmd = ["node", test_js]
         if os.path.exists(PROXYCHAINS_CONF):
@@ -229,25 +280,33 @@ def compare_usage(expected: str, actual: str) -> bool:
     return normalize(expected) == normalize(actual)
 
 
-def cmd_status(compact_path: str, session_key: str):
-    text = pathlib.Path(compact_path).read_text(encoding="utf-8")
+def bundle_patched(text: str) -> bool:
+    return PATCH_MARKER in text and "sessionEntry: resolved.entry" in text and "auth: usageAuth" in text
+
+
+def cmd_status(target_paths: list[str], session_key: str):
     print(json.dumps({
-        "compactPath": compact_path,
-        "patched": is_patched(text),
+        "targetPaths": target_paths,
+        "patched": {path: bundle_patched(read_text(path)) for path in target_paths},
         "sessionKey": session_key,
     }, ensure_ascii=False))
 
 
-def cmd_verify(compact_path: str, session_key: str):
+def cmd_verify(target_paths: list[str], session_key: str):
     _session, profile_id, profile = current_session_and_profile(session_key)
     expected = expected_usage_line(profile)
-    actual = actual_status_usage_line(compact_path, session_key)
-    ok = compare_usage(expected, actual)
+    compact_path = next((path for path in target_paths if "/compact-" in path), target_paths[0])
+    actual_compact = actual_status_usage_line(compact_path, session_key)
+    bundle_state = {path: bundle_patched(read_text(path)) for path in target_paths}
+    line_ok = actual_compact == "NO_USAGE_LINE" or compare_usage(expected, actual_compact)
+    ok = line_ok and all(bundle_state.values())
     print(json.dumps({
         "sessionKey": session_key,
         "profileId": profile_id,
         "expectedUsage": expected,
-        "actualUsage": actual,
+        "actualCompactUsage": actual_compact,
+        "bundlesPatched": bundle_state,
+        "verificationMode": "structure-only" if actual_compact == "NO_USAGE_LINE" else "usage-compare",
         "match": ok,
     }, ensure_ascii=False))
     if not ok:
@@ -255,23 +314,23 @@ def cmd_verify(compact_path: str, session_key: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Patch OpenClaw /status usage to bind to current session auth profile.")
+    parser = argparse.ArgumentParser(description="Patch OpenClaw status/session_status usage to bind to current session auth profile.")
     parser.add_argument("action", choices=["status", "apply", "verify"])
     parser.add_argument("--session-key", default="")
     args = parser.parse_args()
 
-    compact_path = find_compact_file()
+    target_paths = find_usage_target_files()
     session_key = find_session_key(args.session_key or None)
 
     if args.action == "status":
-        cmd_status(compact_path, session_key)
+        cmd_status(target_paths, session_key)
         return
     if args.action == "apply":
-        result = apply_patch(compact_path)
+        result = apply_patch(target_paths)
         print(json.dumps({**result, "sessionKey": session_key}, ensure_ascii=False))
         return
     if args.action == "verify":
-        cmd_verify(compact_path, session_key)
+        cmd_verify(target_paths, session_key)
         return
 
 
