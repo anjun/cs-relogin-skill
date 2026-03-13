@@ -6,6 +6,7 @@ AGENTS_DIR="$STATE_DIR/agents"
 MAIN_AUTH_FILE="$AGENTS_DIR/main/agent/auth-profiles.json"
 SERVICE_NAME="${OPENCLAW_GATEWAY_SERVICE:-openclaw-gateway.service}"
 DEFAULT_PROFILE_ID="${CHATGPTSWITCH_PROFILE_ID:-openai-codex:default}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OAUTH_CLIENT_ID="${CHATGPTSWITCH_OAUTH_CLIENT_ID:-app_EMoamEEZ73f0CkXaXp7hrann}"
 OAUTH_AUTHORIZE_URL="${CHATGPTSWITCH_OAUTH_AUTHORIZE_URL:-https://auth.openai.com/oauth/authorize}"
@@ -26,6 +27,7 @@ Usage:
   chatgptswitch <source-json-path> [--profile-id <id>] --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch use <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]
   chatgptswitch remove <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]
+  chatgptswitch patch status-usage [--apply] [--restart|--no-restart|--deferred-restart] [--session-key <key>]
   chatgptswitch list
   chatgptswitch status
 
@@ -86,6 +88,39 @@ default_restart_mode() {
   else
     # Running from normal shell/SSH: keep historical behavior (restart by default).
     normalize_restart_mode "${CHATGPTSWITCH_DEFAULT_RESTART_MODE:-restart}" "restart"
+  fi
+}
+
+resolve_patch_status_usage_script() {
+  local candidates=(
+    "$SCRIPT_DIR/../scripts/patch_openclaw_status_usage.py"
+    "$SCRIPT_DIR/../share/cs-relogin/patch_openclaw_status_usage.py"
+    "$SCRIPT_DIR/../skills/cs-relogin/scripts/patch_openclaw_status_usage.py"
+    "$HOME/.local/share/cs-relogin/patch_openclaw_status_usage.py"
+    "$HOME/.openclaw/workspace/cs-relogin-skill/scripts/patch_openclaw_status_usage.py"
+    "$HOME/.openclaw/workspace/cs-relogin-skill/skills/cs-relogin/scripts/patch_openclaw_status_usage.py"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [ -f "$candidate" ]; then
+      printf '%s
+' "$candidate"
+      return 0
+    fi
+  done
+  echo "[ERR] patch_openclaw_status_usage.py not found." >&2
+  return 1
+}
+
+run_status_usage_patch() {
+  local action="$1"
+  local session_key="${2:-}"
+  local patch_script
+  patch_script="$(resolve_patch_status_usage_script)" || return 1
+  if [ -n "$session_key" ]; then
+    python3 "$patch_script" "$action" --session-key "$session_key"
+  else
+    python3 "$patch_script" "$action"
   fi
 }
 
@@ -848,6 +883,70 @@ PY
     echo "[OK] synced session auth profile overrides: $sync_n"
     run_restart_mode "$restart_mode"
     print_status
+    exit 0
+    ;;
+  patch)
+    [ $# -ge 2 ] || { echo "[ERR] missing patch name" >&2; exit 1; }
+    patch_name="$2"
+    [ "$patch_name" = "status-usage" ] || { echo "[ERR] unsupported patch: $patch_name" >&2; exit 1; }
+    apply="0"
+    verify_after="1"
+    restart_mode="$(default_restart_mode)"
+    session_key=""
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --apply)
+          apply="1"
+          ;;
+        --restart)
+          restart_mode="restart"
+          ;;
+        --deferred-restart)
+          restart_mode="deferred"
+          ;;
+        --no-restart)
+          restart_mode="no-restart"
+          ;;
+        --session-key)
+          shift
+          [ $# -gt 0 ] || { echo "[ERR] --session-key requires value" >&2; exit 1; }
+          session_key="$1"
+          ;;
+        --verify)
+          verify_after="1"
+          ;;
+        --no-verify)
+          verify_after="0"
+          ;;
+        *)
+          echo "[ERR] unknown option: $1" >&2
+          exit 1
+          ;;
+      esac
+      shift
+    done
+
+    if [ "$apply" != "1" ]; then
+      echo "[SAFE] Dry-run only. No files modified."
+      run_status_usage_patch status "$session_key"
+      echo "[NEXT] cs patch status-usage --apply"
+      exit 2
+    fi
+
+    before_verify_ok=0
+    if run_status_usage_patch verify "$session_key"; then
+      before_verify_ok=1
+    else
+      before_verify_ok=0
+    fi
+    echo "[INFO] pre-verify match=$before_verify_ok"
+    apply_out="$(run_status_usage_patch apply "$session_key")"
+    echo "[OK] patch applied: $apply_out"
+    run_restart_mode "$restart_mode"
+    if [ "$verify_after" = "1" ]; then
+      run_status_usage_patch verify "$session_key"
+    fi
     exit 0
     ;;
   use)

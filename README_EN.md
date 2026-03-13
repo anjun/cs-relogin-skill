@@ -6,7 +6,7 @@
 
 An OpenClaw skill focused on one thing:
 
-> Automate **ChatGPT Auth (Codex OAuth) login/account switching** with `cs relogin`, `cs use`, and `cs remove`.
+> Automate **ChatGPT Auth (Codex OAuth) login/account switching** with `cs relogin`.
 
 ## Core use case
 
@@ -43,7 +43,7 @@ This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.1/install.sh | bash
 ```
 
 > Native Windows is not supported for now (this project depends on Bash).
@@ -58,19 +58,16 @@ cs relogin status
 
 ```bash
 # 1) Install on the server shell
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.1/install.sh | bash
 
 # 2) Check current account status
 cs status
 
-# 3) Create an alias for a new account (prints OAuth URL)
-cs relogin personal
+# 3) Start relogin (prints OAuth URL)
+cs relogin
 
 # 4) Paste callback URL/code to finish
 cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]
-
-# 5) Switch directly later
-cs use personal --apply
 ```
 
 ## Compatibility review
@@ -82,7 +79,7 @@ cs use personal --apply
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
-Safe defaults (v1.2.0+):
+Safe defaults (v1.2.1+):
 - Write operations require explicit `--apply`
 - Restart policy is runtime-aware: default deferred restart in OpenClaw chat/skill execution, default immediate restart in direct shell/SSH usage; override via `--restart` / `--no-restart` / `--deferred-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
@@ -108,12 +105,10 @@ unzip -l dist/cs-relogin.skill
 ## Typical commands
 
 - `cs relogin`
-- `cs relogin personal`
 - `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
-- `cs use personal --apply`
-- `cs remove old-account --apply`
 - `cs relogin status`
 - `cs status`
+- `cs patch status-usage --apply [--restart|--no-restart|--deferred-restart]`
 
 ## Structure
 
@@ -132,6 +127,9 @@ skills/
 dist/
   cs-relogin.skill
 
+scripts/
+  patch_openclaw_status_usage.py
+
 install.sh
 ```
 
@@ -140,6 +138,23 @@ install.sh
 - This tool orchestrates auth login/switch only
 - It should never expose full token values
 
+
+## OpenClaw `/status` Usage Fix
+
+If OpenClaw `/status` shows a Codex usage value that does not match the current session account, run:
+
+```bash
+cs patch status-usage --apply
+```
+
+What it does:
+- binds `/status` usage lookup to the session's current `authProfileOverride`
+- restarts the gateway
+- runs a before/after verification so the reported usage matches the active account
+
+Notes:
+- this is a replayable patch against the current OpenClaw bundle
+- if an OpenClaw upgrade overwrites it, just run the command again
 
 ## Callback Flow Recommendation (avoid reply-chain stalls)
 
