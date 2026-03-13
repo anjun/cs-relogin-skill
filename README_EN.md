@@ -23,7 +23,7 @@ Handle the full relogin flow for you:
 **Let the AI model handle login/account switching for you:**
 
 1. Install this skill (see "One-line install" below)
-2. Tell the model: `Help me login to ChatGPT` or `Switch to my Xianyu account`
+2. Tell the model: `Help me login to ChatGPT` or `Switch my ChatGPT account`
 3. The model runs `cs relogin` automatically, gives you the OAuth URL → waits for callback → completes login and reports status
 
 **That's it. No need to remember commands.**
@@ -31,7 +31,7 @@ Handle the full relogin flow for you:
 ## Pain points solved
 
 1. **Multi-account switching is tedious** (CLI + browser + callback + status checks).
-2. **Frequent Xianyu account session drops** require repeated re-login.
+2. **Multi-account switching is tedious**: login URL, browser auth, callback URL, and status checks are easy to get wrong.
 3. **Slow troubleshooting** when failures happen.
 
 ## One-line install (includes original `cs` command)
@@ -43,7 +43,7 @@ This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.3/install.sh | bash
 ```
 
 > Native Windows is not supported for now (this project depends on Bash).
@@ -58,7 +58,7 @@ cs relogin status
 
 ```bash
 # 1) Install on the server shell
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.3/install.sh | bash
 
 # 2) Check current account status
 cs status
@@ -79,7 +79,7 @@ cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-r
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
-Safe defaults (v1.2.2+):
+Safe defaults (v1.2.3+):
 - Write operations require explicit `--apply`
 - Restart policy is runtime-aware: default deferred restart in OpenClaw chat/skill execution, default immediate restart in direct shell/SSH usage; override via `--restart` / `--no-restart` / `--deferred-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
@@ -105,8 +105,12 @@ unzip -l dist/cs-relogin.skill
 ## Typical commands
 
 - `cs relogin`
+- `cs relogin <alias>`
 - `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
+- `cs use <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]`
+- `cs remove <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]`
 - `cs relogin status`
+- `cs list`
 - `cs status`
 - `cs patch status-usage --apply [--restart|--no-restart|--deferred-restart]`
 

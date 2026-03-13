@@ -17,7 +17,7 @@
 **把技能丢给大模型，直接让它帮你登录/切号：**
 
 1. 安装本技能（见下方"一键安装"）
-2. 对大模型说：`帮我登录 ChatGPT 账号` 或 `帮我切换到某鱼号`
+2. 对大模型说：`帮我登录 ChatGPT 账号` 或 `帮我切换 ChatGPT 账号`
 3. 模型会自动执行 `cs relogin` 流程，给你 OAuth 链接 → 等你粘贴 callback → 完成登录并回报状态
 
 **就这么简单，不需要你记命令。**
@@ -25,7 +25,7 @@
 ## 痛点（为什么要做）
 
 1. **多账号切换流程麻烦**：命令、浏览器、回调 URL、状态确认，步骤繁琐且易漏。
-2. **某鱼号容易掉线**：需要频繁重新登录，重复操作浪费时间。
+2. **多账号切换流程麻烦**：生成链接、浏览器授权、回调 URL、状态确认，步骤多且容易出错。
 3. **失败定位慢**：不知道该优先看哪个状态命令。
 
 ## 一键安装（包含原始 cs 命令）
@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.3/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,7 +52,7 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.3/install.sh | bash
 
 # 2) 查看当前状态
 cs status
@@ -96,7 +96,7 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
-安全默认值（v1.2.2+）：
+安全默认值（v1.2.3+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
 - 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认延迟重启；在 SSH/终端直接执行时默认立即重启；可用 `--restart` / `--no-restart` / `--deferred-restart` 显式覆盖
 - 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
@@ -104,8 +104,12 @@ unzip -l dist/cs-relogin.skill
 ## 常见命令
 
 - `cs relogin`
+- `cs relogin <alias>`
 - `cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-restart]`
+- `cs use <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]`
+- `cs remove <profile-id-or-alias> --apply [--restart|--no-restart|--deferred-restart]`
 - `cs relogin status`
+- `cs list`
 - `cs status`
 - `cs patch status-usage --apply [--restart|--no-restart|--deferred-restart]`
 

@@ -101,3 +101,17 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      - patch applied or already present
      - backup path
      - before/after verify result
+
+5. If user wants to switch to an already-saved account alias/profile:
+   - Run:
+     ```bash
+     "$SKILL_DIR/scripts/cs" use <profile-id-or-alias> --apply --deferred-restart
+     ```
+   - Summarize active profile after switching.
+
+6. If user wants to delete a saved account alias/profile:
+   - Run:
+     ```bash
+     "$SKILL_DIR/scripts/cs" remove <profile-id-or-alias> --apply --deferred-restart
+     ```
+   - Summarize current active profile after removal.
