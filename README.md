@@ -37,7 +37,7 @@
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.6/install.sh | bash
 ```
 
 > Windows 原生当前不支持（本项目依赖 Bash）。
@@ -52,7 +52,7 @@ cs relogin status
 
 ```bash
 # 1) 登录服务器后安装
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.6/install.sh | bash
 
 # 2) 查看当前状态
 cs status
@@ -96,7 +96,7 @@ unzip -l dist/cs-relogin.skill
 
 依赖：`bash`、`python3`、`curl`、`openclaw`。
 
-安全默认值（v1.2.5+）：
+安全默认值（v1.2.6+）：
 - 涉及写入认证文件的操作必须显式加 `--apply`
 - 重启策略按运行时区分：在 OpenClaw 聊天/技能执行中默认延迟重启；在 SSH/终端直接执行时默认立即重启；可用 `--restart` / `--no-restart` / `--deferred-restart` 显式覆盖
 - 默认不做自动代理回退；仅在显式设置 `CHATGPTSWITCH_PROXY` 时使用代理
@@ -111,6 +111,7 @@ unzip -l dist/cs-relogin.skill
 - `cs relogin status`
 - `cs list`
 - `cs status`
+- `cs usage [profile-id-or-alias]`
 - `cs patch status-usage --apply [--restart|--no-restart|--deferred-restart]`
 
 ## 目录结构
@@ -144,7 +145,13 @@ install.sh
 
 ## OpenClaw `/status` Usage 修复
 
-如果 OpenClaw `/status` 或 `session_status` 工具显示的 Codex Usage 和当前会话账号不一致，可执行：
+如果你只是想看当前账号真实额度，优先用无侵入命令：
+
+```bash
+cs usage
+```
+
+如果 OpenClaw `/status` 或 `session_status` 工具显示的 Codex Usage 和当前会话账号不一致，再执行：
 
 ```bash
 cs patch status-usage --apply

@@ -30,6 +30,7 @@ Usage:
   chatgptswitch patch status-usage [--apply] [--restart|--no-restart|--deferred-restart] [--session-key <key>]
   chatgptswitch list
   chatgptswitch status
+  chatgptswitch usage [profile-id-or-alias]
 
 Description:
   A) Recommended account switch (non-interactive):
@@ -196,6 +197,121 @@ if os.path.exists(pending):
         print("pending_relogin: yes (unreadable)")
 else:
     print("pending_relogin: no")
+PY
+}
+
+print_usage() {
+  local target="${1:-}"
+  if [ ! -f "$MAIN_AUTH_FILE" ]; then
+    echo "[ERR] auth file not found: $MAIN_AUTH_FILE" >&2
+    exit 1
+  fi
+  python3 - "$MAIN_AUTH_FILE" "$target" <<'PY'
+import json, sys, os, time
+from urllib.request import Request, urlopen, build_opener, ProxyHandler
+from urllib.error import HTTPError, URLError
+
+auth_file = sys.argv[1]
+raw_target = (sys.argv[2] or "").strip()
+
+with open(auth_file, encoding="utf-8") as f:
+    data = json.load(f)
+
+profiles = data.get("profiles", {})
+active = (data.get("lastGood", {}).get("openai-codex", "") or "").strip()
+
+def normalize_target(value: str) -> str:
+    if not value:
+        return ""
+    if value.startswith("openai-codex:"):
+        return value
+    return f"openai-codex:{value}"
+
+target_id = normalize_target(raw_target) if raw_target else active
+if not target_id:
+    raise SystemExit("[ERR] no active openai-codex profile. Run: cs status")
+
+profile = profiles.get(target_id)
+if not isinstance(profile, dict):
+    raise SystemExit(f"[ERR] profile not found: {target_id}")
+if profile.get("provider") != "openai-codex":
+    raise SystemExit(f"[ERR] profile is not openai-codex: {target_id}")
+
+access = (profile.get("access") or "").strip()
+if not access:
+    raise SystemExit(f"[ERR] profile missing access token: {target_id}")
+account_id = (profile.get("accountId") or "").strip()
+
+headers = {
+    "Authorization": f"Bearer {access}",
+    "User-Agent": "chatgptswitch/2.3",
+    "Accept": "application/json",
+}
+if account_id:
+    headers["ChatGPT-Account-Id"] = account_id
+
+req = Request("https://chatgpt.com/backend-api/wham/usage", headers=headers, method="GET")
+proxy = (os.environ.get("CHATGPTSWITCH_PROXY") or "").strip()
+
+try:
+    if proxy:
+        opener = build_opener(ProxyHandler({"http": proxy, "https": proxy}))
+        with opener.open(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8", "replace"))
+    else:
+        with urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8", "replace"))
+except HTTPError as e:
+    detail = ""
+    try:
+        detail = e.read().decode("utf-8", "replace")
+    except Exception:
+        pass
+    hint = "" if proxy else " (hint: export CHATGPTSWITCH_PROXY=http://127.0.0.1:7890)"
+    raise SystemExit(f"[ERR] usage API failed: HTTP {e.code} {detail or e.reason}{hint}")
+except (URLError, TimeoutError, OSError) as e:
+    hint = "" if proxy else " (hint: export CHATGPTSWITCH_PROXY=http://127.0.0.1:7890)"
+    raise SystemExit(f"[ERR] usage API failed: {e}{hint}")
+
+rate = payload.get("rate_limit") or {}
+primary = rate.get("primary_window") or {}
+used_percent = float(primary.get("used_percent") or 0)
+remaining = max(0, min(100, round(100 - used_percent)))
+window_seconds = int(primary.get("limit_window_seconds") or 604800)
+label = f"{round(window_seconds / 3600)}h"
+reset_at = primary.get("reset_at")
+reset_ms = int(reset_at * 1000) if isinstance(reset_at, (int, float)) else None
+
+def remaining_short(target_ms):
+    if not target_ms:
+        return None
+    diff = target_ms - int(time.time() * 1000)
+    if diff <= 0:
+        return "now"
+    mins = diff // 60000
+    if mins < 60:
+        return f"{mins}m"
+    hrs = mins // 60
+    rem = mins % 60
+    if hrs < 24:
+        return f"{hrs}h {rem}m" if rem else f"{hrs}h"
+    days = hrs // 24
+    if days < 7:
+        return f"{days}d {hrs % 24}h"
+    return time.strftime("%b %d", time.localtime(target_ms / 1000))
+
+suffix = ""
+short = remaining_short(reset_ms)
+if short:
+    suffix = f" ⏱{short}"
+
+usage_line = f"📊 Usage: {label} {remaining}% left{suffix}"
+print(json.dumps({
+    "profileId": target_id,
+    "accountId": account_id or None,
+    "planType": rate.get("plan_type"),
+    "usageLine": usage_line
+}, ensure_ascii=False))
 PY
 }
 
@@ -801,6 +917,16 @@ case "$cmd" in
     ;;
   status|list)
     print_status
+    exit 0
+    ;;
+  usage)
+    shift
+    target="${1:-}"
+    if [ $# -gt 1 ]; then
+      echo "[ERR] usage accepts at most one optional profile-id-or-alias." >&2
+      exit 1
+    fi
+    print_usage "$target"
     exit 0
     ;;
   relogin)

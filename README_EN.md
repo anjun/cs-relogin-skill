@@ -43,7 +43,7 @@ This repo includes executable command files: `bin/chatgptswitch` and `bin/cs`.
 Linux / macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.6/install.sh | bash
 ```
 
 > Native Windows is not supported for now (this project depends on Bash).
@@ -58,7 +58,7 @@ cs relogin status
 
 ```bash
 # 1) Install on the server shell
-curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anjun/cs-relogin-skill/v1.2.6/install.sh | bash
 
 # 2) Check current account status
 cs status
@@ -79,7 +79,7 @@ cs relogin '<callback-url-or-code>' --apply [--restart|--no-restart|--deferred-r
 
 Dependencies: `bash`, `python3`, `curl`, `openclaw`.
 
-Safe defaults (v1.2.5+):
+Safe defaults (v1.2.6+):
 - Write operations require explicit `--apply`
 - Restart policy is runtime-aware: default deferred restart in OpenClaw chat/skill execution, default immediate restart in direct shell/SSH usage; override via `--restart` / `--no-restart` / `--deferred-restart`
 - No automatic proxy fallback; proxy is used only when `CHATGPTSWITCH_PROXY` is explicitly set
@@ -112,6 +112,7 @@ unzip -l dist/cs-relogin.skill
 - `cs relogin status`
 - `cs list`
 - `cs status`
+- `cs usage [profile-id-or-alias]`
 - `cs patch status-usage --apply [--restart|--no-restart|--deferred-restart]`
 
 ## Structure
@@ -145,7 +146,13 @@ install.sh
 
 ## OpenClaw `/status` Usage Fix
 
-If OpenClaw `/status` or the `session_status` tool shows a Codex usage value that does not match the current session account, run:
+If you only need the real quota for the current account, prefer the non-invasive command first:
+
+```bash
+cs usage
+```
+
+If OpenClaw `/status` or the `session_status` tool still shows a mismatched Codex usage value, run:
 
 ```bash
 cs patch status-usage --apply

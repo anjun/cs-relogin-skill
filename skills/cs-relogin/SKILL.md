@@ -61,6 +61,10 @@ SKILL_DIR="<dirname-of-this-SKILL.md>"
      "$SKILL_DIR/scripts/cs" status
      ```
    - Summarize pending state and active account.
+   - If user asks for real Codex quota of current account, run:
+     ```bash
+     "$SKILL_DIR/scripts/cs" usage
+     ```
 
 ## Output format
 
